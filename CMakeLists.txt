@@ -44,5 +44,10 @@ add_library(imgui STATIC
         )
 target_link_libraries(imgui glfw)
 target_link_libraries(nbody imgui)
+find_package(GLEW REQUIRED)
+include_directories(${GLEW_INCLUDE_DIRS})
+target_link_libraries(nbody GLEW::GLEW)
+
+
 
 target_compile_options(nbody PRIVATE -O3)
