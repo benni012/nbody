@@ -39,7 +39,8 @@ target_compile_options(nbody PRIVATE -O3)
 find_package(CUDA)
 if(CUDA_FOUND)
     message(STATUS "CUDA found. Adding GPU support.")
-    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=sm_60")
+    # fmad https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/#options-for-steering-gpu-code-generation
+    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=sm_60 -fmad=true")
 
     add_executable(gpu_nbody gpu_nbody.cu)
     target_include_directories(gpu_nbody PRIVATE imgui/ ${GLEW_INCLUDE_DIRS})

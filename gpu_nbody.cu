@@ -1,9 +1,6 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #define IMGUI_DEFINE_MATH_OPERATORS
-#include "Eigen/Core"
-#include "Eigen/Dense"
-#include "Eigen/Geometry"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "imgui.h"
@@ -16,8 +13,8 @@
 #include <thread>
 
 #define G 6.67408e-11
-#define BLOCK_SIZE 128
-#define N 5.3e3
+#define BLOCK_SIZE 256
+#define N 7.5e3
 
 int width = 1280;
 int height = 720;
@@ -38,10 +35,10 @@ __global__ void step(float4 *positions, float3 *velocities,
                      int pointCount, int totalPairs) {
   int particle_idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (particle_idx > N) return;
+  float4 particle_pos = positions[particle_idx];  // load into register
+
   __shared__ float4 shared_pos[BLOCK_SIZE];  
   for (int i = 0; i < N; i += BLOCK_SIZE) {
-    // int other_idx = (int)(i/N) * blockDim.x + threadIdx.x;
-    // shared_pos[threadIdx.x] = positions[other_idx];
     int other_idx = i + threadIdx.x;
     if (other_idx < pointCount) {
       shared_pos[threadIdx.x] = positions[other_idx];
@@ -49,23 +46,26 @@ __global__ void step(float4 *positions, float3 *velocities,
     shared_pos[threadIdx.x] = make_float4(0, 0, 0, 0); // Fallback for invalid threads
     }
     __syncthreads();
+    #pragma unroll
     for (int j = 0; j < BLOCK_SIZE; j++){
-      float dx = shared_pos[j].x - positions[particle_idx].x;
-      float dy = shared_pos[j].y - positions[particle_idx].y;
-      float dz = shared_pos[j].z - positions[particle_idx].z;
+      if (i+j >= N) break;
+      float4 other_pos = shared_pos[j];  // load into register
+      float dx = other_pos.x - particle_pos.x;
+      float dy = other_pos.y - particle_pos.y;
+      float dz = other_pos.z - particle_pos.z;
       float distSq = dx * dx + dy * dy + dz * dz;
       if (distSq < 1e-4f)
         distSq = 1e-4f;
-
-      float invDist = 1.0f / sqrtf(distSq);
+      float invDist = rsqrtf(distSq);
       float invDist3 = invDist * invDist * invDist;
-      float force = G * positions[particle_idx].w * shared_pos[j].w * invDist3;
-      velocities[particle_idx].x += dx * force / positions[particle_idx].w;
-      velocities[particle_idx].y += dy * force / positions[particle_idx].w;
-      velocities[particle_idx].z += dz * force / positions[particle_idx].w;
+      float force = G * particle_pos.w * other_pos.w * invDist3;
+      float fw = force / particle_pos.w; 
+      velocities[particle_idx].x += dx * fw;
+      velocities[particle_idx].y += dy * fw;
+      velocities[particle_idx].z += dz * fw;
     }
-  }
   __syncthreads();
+  }
 }
 __global__ void update(float4 *positions, float3 *velocities, int pointCount) {
   int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -214,7 +214,7 @@ int main() {
     velocities[i].z = 0.0;
     // radii[i] = 2;
   }
-  int pointCount = N;
+  // int pointCount = N;
 
   float4 *d_positions;
   float3 *d_velocities;
