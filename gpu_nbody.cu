@@ -34,17 +34,15 @@ int height = 720;
 __global__ void step(float4 *positions, float3 *velocities,
                      int pointCount, int totalPairs) {
   int particle_idx = blockIdx.x * blockDim.x + threadIdx.x;
-  if (particle_idx > N) return;
+  if (particle_idx >= N) return;
   float4 particle_pos = positions[particle_idx];  // load into register
 
   __shared__ float4 shared_pos[BLOCK_SIZE];  
   for (int i = 0; i < N; i += BLOCK_SIZE) {
     int other_idx = i + threadIdx.x;
-    if (other_idx < pointCount) {
-      shared_pos[threadIdx.x] = positions[other_idx];
-    } else {
-    shared_pos[threadIdx.x] = make_float4(0, 0, 0, 0); // Fallback for invalid threads
-    }
+    if (other_idx >= N) return;
+    shared_pos[threadIdx.x] = positions[other_idx];
+
     __syncthreads();
     #pragma unroll
     for (int j = 0; j < BLOCK_SIZE; j++){
