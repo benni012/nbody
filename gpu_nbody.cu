@@ -17,7 +17,7 @@
 
 #define G 6.67408e-11
 #define BLOCK_SIZE 128
-#define N 2e3
+#define N 5.3e3
 
 int width = 1280;
 int height = 720;
@@ -34,37 +34,45 @@ int height = 720;
   } while (0)
 
 // Kernel for updating positions and velocities
-__global__ void step(float *positions, float *velocities, float *masses,
+__global__ void step(float4 *positions, float3 *velocities,
                      int pointCount, int totalPairs) {
-  int pi = blockIdx.x * blockDim.x + threadIdx.x;
-  __shared__ float pos_s[BLOCK_SIZE];  
-  for (int i = 0; i < N; i += blockDim.x) {
-    pos_s[threadIdx.x] = positions[(int)(i/N) * blockDim.x + threadIdx.x];
+  int particle_idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (particle_idx > N) return;
+  __shared__ float4 shared_pos[BLOCK_SIZE];  
+  for (int i = 0; i < N; i += BLOCK_SIZE) {
+    // int other_idx = (int)(i/N) * blockDim.x + threadIdx.x;
+    // shared_pos[threadIdx.x] = positions[other_idx];
+    int other_idx = i + threadIdx.x;
+    if (other_idx < pointCount) {
+      shared_pos[threadIdx.x] = positions[other_idx];
+    } else {
+    shared_pos[threadIdx.x] = make_float4(0, 0, 0, 0); // Fallback for invalid threads
+    }
     __syncthreads();
-    for (int j = 0; j < BLOCK_SIZE;j++){
-      float dx = positions[j * 3] - positions[i * 3];
-      float dy = positions[j * 3 + 1] - positions[i * 3 + 1];
-      float dz = positions[j * 3 + 2] - positions[i * 3 + 2];
+    for (int j = 0; j < BLOCK_SIZE; j++){
+      float dx = shared_pos[j].x - positions[particle_idx].x;
+      float dy = shared_pos[j].y - positions[particle_idx].y;
+      float dz = shared_pos[j].z - positions[particle_idx].z;
       float distSq = dx * dx + dy * dy + dz * dz;
       if (distSq < 1e-4f)
         distSq = 1e-4f;
 
       float invDist = 1.0f / sqrtf(distSq);
       float invDist3 = invDist * invDist * invDist;
-      float force = G * masses[i] * masses[j] * invDist3;
-      velocities[i * 3] += dx * force / masses[i];
-      velocities[i * 3 + 1] += dy * force / masses[i];
-      velocities[i * 3 + 2] += dz * force / masses[i];
+      float force = G * positions[particle_idx].w * shared_pos[j].w * invDist3;
+      velocities[particle_idx].x += dx * force / positions[particle_idx].w;
+      velocities[particle_idx].y += dy * force / positions[particle_idx].w;
+      velocities[particle_idx].z += dz * force / positions[particle_idx].w;
     }
   }
   __syncthreads();
 }
-__global__ void update(float *positions, float *velocities, int pointCount) {
+__global__ void update(float4 *positions, float3 *velocities, int pointCount) {
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i < pointCount) {
-    positions[i * 3] += velocities[i * 3];
-    positions[i * 3 + 1] += velocities[i * 3 + 1];
-    positions[i * 3 + 2] += velocities[i * 3 + 2];
+    positions[i].x += velocities[i].x;
+    positions[i].y += velocities[i].y;
+    positions[i].z += velocities[i].z;
   }
 }
 
@@ -182,10 +190,10 @@ int main() {
   ImGuiIO &io = ImGui::GetIO();
   io.Fonts->AddFontDefault(&fontConfig);
 
-  float *positions, *velocities, *masses;
-  cudaMallocHost(&positions, N * 3 * sizeof(float));
-  cudaMallocHost(&velocities, N * 3 * sizeof(float));
-  cudaMallocHost(&masses, N * sizeof(float));
+  float4 *positions; 
+  float3 *velocities;
+  cudaMallocHost(&positions, N * sizeof(float4));
+  cudaMallocHost(&velocities, N * sizeof(float3));
 
   // Initialize positions, velocities, and masses
   std::default_random_engine generator(42);
@@ -196,36 +204,24 @@ int main() {
     float x = cos(curve) - sin(curve);
     float y = cos(curve) + sin(curve);
     float vel = sqrt(6.67e-11 * N * 200 / radius) * 0.05;
-    // if (i==0){
-    //   printf("C%.25f\n", curve);
-    //   printf("R%.25f\n", radius);
-    //   printf("X%.25f\n", x);
-    //   printf("Y%.25f\n", y);
-    //   printf("V%.25f\n", vel);
-    // }
-    positions[3 * i] = radius * x;
-    positions[3 * i + 1] = radius * y;
-    positions[3 * i + 2] = 0.02 * ((rand() / float(RAND_MAX)) - 0.5);
+    positions[i].w = 7.;
+    positions[i].x = radius * x;
+    positions[i].y = radius * y;
+    positions[i].z = 0.02 * ((rand() / float(RAND_MAX)) - 0.5);
 
-    velocities[3 * i] = -y * vel;
-    velocities[3 * i + 1] = x * vel;
-    velocities[3 * i + 2] = 0.0;
-    masses[i] = 7.;
+    velocities[i].x = -y * vel;
+    velocities[i].y = x * vel;
+    velocities[i].z = 0.0;
     // radii[i] = 2;
   }
-  // printf("P1%.25f %.25f %.25f\n", positions[0], positions[1],positions[2]);
-  // printf("P2%.25f %.25f %.25f\n", positions[3], positions[4],positions[5]);
   int pointCount = N;
 
-  float *d_positions, *d_velocities, *d_masses;
-  cudaMalloc(&d_positions, N * 3 * sizeof(float));
-  cudaMalloc(&d_velocities, N * 3 * sizeof(float));
-  cudaMalloc(&d_masses, N * sizeof(float));
-  cudaMemcpy(d_positions, positions, N * 3 * sizeof(float),
-             cudaMemcpyHostToDevice);
-  cudaMemcpy(d_velocities, velocities, N * 3 * sizeof(float),
-             cudaMemcpyHostToDevice);
-  cudaMemcpy(d_masses, masses, N * sizeof(float), cudaMemcpyHostToDevice);
+  float4 *d_positions;
+  float3 *d_velocities;
+  cudaMalloc(&d_positions, N * sizeof(float4));
+  cudaMalloc(&d_velocities, N * sizeof(float3));
+  cudaMemcpy(d_positions, positions, N * sizeof(float4), cudaMemcpyHostToDevice);
+  cudaMemcpy(d_velocities, velocities, N * sizeof(float3), cudaMemcpyHostToDevice);
 
   GLuint shaderProgram =
       createShaderProgram(vertexShaderSource, fragmentShaderSource);
@@ -241,10 +237,9 @@ int main() {
 
   glBindVertexArray(vao);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER, N * 3 * sizeof(float), positions,
-               GL_DYNAMIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, N * sizeof(float4), positions, GL_DYNAMIC_DRAW);
 
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
 
   glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -256,7 +251,7 @@ int main() {
     glfwPollEvents();
 
     double currentTime = glfwGetTime();
-    cudaMemcpy(positions, d_positions, N * 3 * sizeof(float),
+    cudaMemcpy(positions, d_positions, N * sizeof(float4),
                cudaMemcpyDeviceToHost);
 
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -266,9 +261,8 @@ int main() {
     glUniform1f(aspectRatioLoc, aspectRatio);
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(positions), positions);
-    glBufferData(GL_ARRAY_BUFFER, N * 3 * sizeof(float), positions,
-                 GL_DYNAMIC_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, N * sizeof(float4), positions);
+    glBufferData(GL_ARRAY_BUFFER, N * sizeof(float4), positions, GL_DYNAMIC_DRAW);
     glEnable(GL_BLEND);
     glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE);
@@ -292,12 +286,12 @@ int main() {
 
     // glfwSwapBuffers(window);
 
-    int numBlocks = (N * N + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    int numBlocks = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
     // printf("NBlocks %d\n", numBlocks);
     int totalPairs = (N * (N - 1)) / 2;
     int numPairBlocks = (totalPairs + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-    step<<<numPairBlocks, BLOCK_SIZE>>>(d_positions, d_velocities, d_masses, N,
+    step<<<numPairBlocks, BLOCK_SIZE>>>(d_positions, d_velocities, N,
                                         totalPairs);
     cudaDeviceSynchronize();
     cudaCheckErrors("STEP Kernel execution failed");
@@ -311,7 +305,7 @@ int main() {
     ImGui::SetNextWindowPos(ImVec2(10, 10));
     ImGui::Begin("Performance");
     ImGui::Text("Frame time: %.3f ms", frameTime * 1000);
-    ImGui::Text("FPS: %.3f", 1000 / (frameTime * 1000));
+    ImGui::Text("FPS: %.3f", 1. / frameTime);
     ImGui::End();
     ImGui::Render();
 
@@ -332,10 +326,8 @@ int main() {
 
   cudaFree(d_positions);
   cudaFree(d_velocities);
-  cudaFree(d_masses);
   cudaFreeHost(positions);
   cudaFreeHost(velocities);
-  cudaFreeHost(masses);
 
   glfwDestroyWindow(window);
   glfwTerminate();
