@@ -17,13 +17,24 @@ set(CMAKE_CXX_STANDARD 17)
 #)
 
 
+# check for cuda, if no cuda, set CUDA_FOUND to false
+find_package(CUDA)
+if(CUDA_FOUND)
+    message("CUDA found")
+else()
+    message("CUDA not found")
+    set(CUDA_FOUND false)
+endif()
 
 
 
 # exectuable nbody
 add_executable(nbody
         main.cpp
-        )
+        nbody_cuda.h
+        graphics.h
+        nbody_cpu.h
+)
 # omp
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
