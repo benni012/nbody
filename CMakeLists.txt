@@ -4,7 +4,24 @@ project(nbody LANGUAGES CXX CUDA)
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 
-# Common libraries and includes
+# imgui
+#add_library(imgui STATIC
+#    imgui/imgui.cpp
+#    imgui/imgui_draw.cpp
+#    imgui/imgui_widgets.cpp
+#    imgui/imgui_impl_glfw.cpp
+#    imgui/imgui_impl_opengl3.cpp
+#)
+
+# exectuable nbody
+add_executable(nbody
+        main.cpp
+        nbody_cuda.h
+        graphics.h
+        nbody_cpu.h
+)
+# omp
+
 find_package(OpenMP)
 find_package(glfw3 3.3 REQUIRED)
 find_package(OpenGL REQUIRED)
