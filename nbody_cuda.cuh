@@ -23,7 +23,7 @@ __global__ void naive_kernel(float4 *positions, float3 *velocities, int pointCou
 __global__ void update_kernel(float4 *positions, float3 *velocities, int pointCount);
 
 // Function declarations
-void memoryMap(float4 *positions, float3 *velocities, int N);
+void pinMem(float4 *positions, float3 *velocities, int N);
 void setupGPU(float4 *positions, float3 *velocities, int N);
 void cleanup(float4 *positions, float3 *velocities);
 void gpu_update_naive(int N, float4 *positions, float3 *velocities);

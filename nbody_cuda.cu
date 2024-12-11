@@ -1,32 +1,30 @@
 #include "nbody_cuda.cuh"
+#define G 6.67408e-11
 
 float4 *d_positions;
 float3 *d_velocities;
 
 __global__ void naive_kernel(float4 *positions, float3 *velocities, int pointCount) {
-  int N = pointCount;
-  float G = 6.67408e-11; 
   int particle_idx = blockIdx.x * blockDim.x + threadIdx.x;
-  if (particle_idx >= N) return;
+  if (particle_idx >= pointCount) return;
   float4 particle_pos = positions[particle_idx];  // load into register
 
   __shared__ float4 shared_pos[BLOCK_SIZE];  
-  for (int i = 0; i < N; i += BLOCK_SIZE) {
+  for (int i = 0; i < pointCount; i += BLOCK_SIZE) {
     int other_idx = i + threadIdx.x;
-    if (other_idx >= N) return;
+    if (other_idx >= pointCount) return;
     shared_pos[threadIdx.x] = positions[other_idx];
 
     __syncthreads();
     #pragma unroll
     for (int j = 0; j < BLOCK_SIZE; j++){
-      if (i+j >= N) break;
+      if (i+j >= pointCount) break;
       float4 other_pos = shared_pos[j];  // load into register
       float dx = other_pos.x - particle_pos.x;
       float dy = other_pos.y - particle_pos.y;
       float dz = other_pos.z - particle_pos.z;
       float distSq = dx * dx + dy * dy + dz * dz;
-      if (distSq < 1e-4f)
-        distSq = 1e-4f;
+      if (distSq < 1e-4f) distSq = 1e-4f;
       float invDist = rsqrtf(distSq);
       float invDist3 = invDist * invDist * invDist;
       float force = G * particle_pos.w * other_pos.w * invDist3;
@@ -48,7 +46,7 @@ __global__ void update_kernel(float4 *positions, float3 *velocities, int pointCo
   }
 }
 
-void memoryMap(float4 *positions, float3 *velocities, int N){
+void pinMem(float4 *positions, float3 *velocities, int N){
   cudaMallocHost(&positions, N * sizeof(float4));
   cudaMallocHost(&velocities, N * sizeof(float3));
 }
