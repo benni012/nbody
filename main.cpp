@@ -5,11 +5,12 @@
 #include <random>
 #include <chrono>
 #include <getopt.h>
+#include <cstring>
 
 #define G 6.67408e-11
 
 #ifdef CUDA_FOUND
-#include "nbody_cuda.h"
+#include "nbody_cuda.cuh"
 #else
 typedef struct float4 {
     float x, y, z, w;
@@ -19,8 +20,8 @@ typedef struct float3 {
     float x, y, z;
 } float3;
 #endif
-#include "graphics.h"
 #include "nbody_cpu.h"
+#include "graphics.h"
 
 int main(int argc, char** argv) {
     // flags: --record --device=[cpu/gpu] --algo=[bh/naive] -n [number of particles]
@@ -37,7 +38,7 @@ int main(int argc, char** argv) {
     bool record = false;
     bool use_gpu = false;
     bool use_bh = false;
-    int N = 5000;
+    int N = 10e3;
 
     while ((opt = getopt_long(argc, argv, "rd:a:n:", long_options, &option_index)) != -1) {
         switch (opt) {
@@ -82,8 +83,15 @@ int main(int argc, char** argv) {
     float4 positions[N];
     float3 velocities[N];
 
+    // Initialize everything
     initGraphics(N, positions);
-
+    if (use_gpu){
+        populate(positions, velocities, N);
+        memoryMap(positions, velocities, N);
+        setupGPU(positions, velocities, N);
+    } else {
+        populate(positions, velocities, N);
+    }
 
 //    // start ffmpeg telling it to expect raw rgba 720p-60hz frames
 //// -i - tells it to read frames from stdin
@@ -98,20 +106,24 @@ int main(int argc, char** argv) {
 //        return -1;
 //    }
 
-    populate(positions, velocities, N);
 
     while (!glfwWindowShouldClose(window)) {
         double currentTime = glfwGetTime();
-//        glfwPollEvents();
 
+    if (use_gpu){
+        gpu_update_naive(N, positions, velocities);
+        
+    } else {
         cpu_update_naive(N, positions, velocities);
+        
+    }
         // time it
         double frameTime = glfwGetTime() - currentTime;
         draw(positions, velocities, N, frameTime);
     }
 
-//    pclose(ffmpeg);
+// //    pclose(ffmpeg);
 
-    cleanup();
+    cleanup(positions, velocities);
     return 0;
 }

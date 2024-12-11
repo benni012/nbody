@@ -4,9 +4,9 @@
 
 #ifndef NBODY_NBODY_CUDA_H
 #define NBODY_NBODY_CUDA_H
-#include "graphics.h"
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include "graphics.h"
 #define BLOCK_SIZE 256
 
 // CUDA error-checking macro
@@ -21,7 +21,7 @@
   } while (0)
 
 // Kernel for updating positions and velocities
-__global__ void step_naive(float4 *positions, float3 *velocities,
+__global__ void gpu_step_naive(float4 *positions, float3 *velocities,
                      int pointCount, int totalPairs) {
     int particle_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (particle_idx >= N) return;
@@ -55,7 +55,7 @@ __global__ void step_naive(float4 *positions, float3 *velocities,
         __syncthreads();
     }
 }
-__global__ void update(float4 *positions, float3 *velocities, int pointCount) {
+__global__ void gpu_update(float4 *positions, float3 *velocities, int pointCount) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < pointCount) {
         positions[i].x += velocities[i].x;
@@ -117,7 +117,7 @@ void update_naive() {
             totalPairs);
     cudaDeviceSynchronize();
     cudaCheckErrors("STEP Kernel execution failed");
-    update<<<numBlocks, BLOCK_SIZE>>>(d_positions, d_velocities, N);
+blockIdx    gpu_update<<<numBlocks, BLOCK_SIZE>>>(d_positions, d_velocities, N);
     cudaDeviceSynchronize();
     cudaCheckErrors("UPDATE Kernel execution failed");
 }
