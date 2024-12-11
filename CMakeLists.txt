@@ -49,7 +49,9 @@ target_link_libraries(nbody
 find_package(CUDA)
 if(CUDA_FOUND)
     message(STATUS "CUDA found. Adding GPU support.")
-    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=sm_60 -rdc=true -O3")
+    # https://developer.nvidia.com/blog/cuda-pro-tip-flush-denormals-confidence/
+    # https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#math-libraries
+    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=sm_60 -rdc=true -ftz=true -O3")
     add_compile_definitions(CUDA_FOUND)
     include_directories(${CUDA_INCLUDE_DIRS})
     include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
