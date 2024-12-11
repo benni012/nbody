@@ -8,6 +8,7 @@
 
 #define G 6.67408e-11
 
+
 #ifdef CUDA_FOUND
 #include "nbody_cuda.h"
 #else
@@ -21,6 +22,9 @@ typedef struct float3 {
 #endif
 #include "graphics.h"
 #include "nbody_cpu.h"
+#include "octree.h"
+octree_t octree;
+
 
 int main(int argc, char** argv) {
     // flags: --record --device=[cpu/gpu] --algo=[bh/naive] -n [number of particles]
@@ -103,6 +107,34 @@ int main(int argc, char** argv) {
     while (!glfwWindowShouldClose(window)) {
         double currentTime = glfwGetTime();
 //        glfwPollEvents();
+
+        // print first pos to stderr
+        // create octree
+        octree_init(&octree, {0, 0, 0}, {1, 1, 1});
+//        octree_split(&octree, ROOT);
+//        octree_split(&octree, octree.nodes[ROOT].children);
+        // print the node vector to stderr
+//        octree_insert(&octree, {700, 100, 0, 1});
+//        octree_insert(&octree, {100, 100, 0, 1});
+//        for (int i = 0; i < octree.nodes.size(); i++) {
+//            fprintf(stderr, "Node %d: %d\n", i, octree.nodes[i].children);
+//        }
+//        return 0;
+
+//        return 0;
+        // manually insert 4 pts in quarters
+//        octree_insert(&octree, {-.5, -.5, 0, 1});
+//        octree_insert(&octree, {-.5, .5, 0, 1});
+//        octree_insert(&octree, {.5, -.5, 0, 1});
+//        octree_insert(&octree, {.5, .5, 0, 1});
+//        // and one in the center
+//        octree_insert(&octree, {0, 0, 0, 1});
+
+        for (int i = 0; i < N; i++) {
+            octree_insert(&octree, positions[i]);
+        }
+        // size of octree print
+        fprintf(stderr, "Octree size: %lu\n", octree.nodes.size());
 
         cpu_update_naive(N, positions, velocities);
         // time it

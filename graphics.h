@@ -12,10 +12,13 @@
 #include <chrono>
 #include <getopt.h>
 #include "imgui.h"
+#include "octree.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
 // exit
 #include <cstdlib>
+
+extern octree_t octree;
 
 void cleanupImGui() {
     ImGui_ImplOpenGL3_Shutdown();
@@ -27,7 +30,7 @@ void cleanupImGui() {
 GLFWwindow *window = nullptr;
 GLuint shaderProgram = 0;
 GLuint vao, vbo;
-int width = 1280;
+int width = 720;
 int height = 720;
 float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
 
@@ -78,7 +81,7 @@ uniform float aspectRatio;
 in vec3 position;
 
 void main() {
-    vec3 adjustedPosition = position * 0.5;
+    vec3 adjustedPosition = position;
     adjustedPosition.x /= aspectRatio; // Correct for aspect ratio
     gl_Position = vec4(adjustedPosition, 1.0);
     gl_PointSize = 3.0; // Adjust as needed
@@ -107,6 +110,38 @@ void setupImGui() {
     }
 }
 
+void octree_draw(octree_t *octree, int idx) {
+    int children = octree->nodes[idx].children;
+
+    box_t box = octree->nodes[idx].box;
+    float3 center = box.center;
+    float3 half = box.half_extent;
+
+    // scale from -1 to 1 to 0 to width/height and also y reversed
+    center.x = (center.x + 1) / 2 * width;
+    center.y = height - (center.y + 1) / 2 * height;
+    half.x = half.x / 2 * width;
+    half.y = half.y / 2 * height;
+
+    // imgui
+    ImGui::GetWindowDrawList()->AddRect(ImVec2(center.x - half.x, center.y - half.y),
+                                        ImVec2(center.x + half.x, center.y + half.y),
+                                        IM_COL32(0, 255, 0, 100));
+    // draw point if any
+    if (octree->nodes[idx].position.w != 0 && children == ROOT) {
+        float4 position = octree->nodes[idx].position;
+        position.x = (position.x + 1) / 2 * width;
+        position.y = height - (position.y + 1) / 2 * height;
+//        ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(position.x, position.y), 5, IM_COL32(255, 255, 0, 255));
+    }
+    if (children == ROOT) {
+        return;
+    }
+    for (int i = 0; i < 8; i++) {
+        octree_draw(octree, children + i);
+    }
+}
+
 void initGraphics(int N, float4 *positions) {
     if (!glfwInit()) exit(-1);
 
@@ -117,7 +152,7 @@ void initGraphics(int N, float4 *positions) {
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 
-    window = glfwCreateWindow(1280, 720, "Dear ImGui Example", nullptr, nullptr);
+    window = glfwCreateWindow(width, height, "Dear ImGui Example", nullptr, nullptr);
     if (!window) {
         glfwTerminate();
         exit(-1);
@@ -192,6 +227,8 @@ void draw(float4 *positions, float3 *velocities, int N, float frameTime) {
             ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
 
     // glfwSwapBuffers(window);
+
+    octree_draw(&octree, ROOT);
 
 
     ImGui::End();

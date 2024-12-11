@@ -4,6 +4,7 @@
 
 #ifndef NBODY_NBODY_CPU_H
 #define NBODY_NBODY_CPU_H
+#include "graphics.h"
 void cpu_update_naive(int N, float4 *positions, float3 *velocities) {
 #pragma omp parallel for
     for (int i = 0; i < N; i++) {
