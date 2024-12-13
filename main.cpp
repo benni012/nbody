@@ -112,8 +112,25 @@ int main(int argc, char** argv) {
 
         if (use_bh) {
             double current_time = start_time;
+            // find min/max of positions
+//            float3 min = {INFINITY, INFINITY, INFINITY};
+//            float3 max = {-INFINITY, -INFINITY, -INFINITY};
+//            for (int i = 0; i < N; i++) {
+//                min.x = fminf(min.x, positions[i].x);
+//                min.y = fminf(min.y, positions[i].y);
+//                min.z = fminf(min.z, positions[i].z);
+//                max.x = fmaxf(max.x, positions[i].x);
+//                max.y = fmaxf(max.y, positions[i].y);
+//                max.z = fmaxf(max.z, positions[i].z);
+//            }
+//            float3 center = {
+//                    (min.x + max.x) / 2,
+//                    (min.y + max.y) / 2,
+//                    (min.z + max.z) / 2
+//            };
             // create octree
-            octree_init(&octree, {0, 0, 0}, {1, 1, 1});
+//            octree_init(&octree, center, fmaxf(max.x - min.x, fmaxf(max.y - min.y, max.z - min.z)));
+            octree_init(&octree, {0, 0, 0}, 1);
             for (int i = 0; i < N; i++) {
                 octree_insert(&octree, positions[i]);
             }

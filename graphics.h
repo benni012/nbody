@@ -121,17 +121,15 @@ void octree_draw(octree_t *octree, int idx, int depth = 0) {
 
     box_t box = octree->nodes[idx].box;
     float3 center = box.center;
-    float3 half = box.half_extent;
+    float half = box.half_extent;
 
     // scale from -1 to 1 to 0 to width/height and also y reversed
     center.x = (center.x + 1) / 2 * width;
     center.y = height - (center.y + 1) / 2 * height;
-    half.x = half.x / 2 * width;
-    half.y = half.y / 2 * height;
 
     // imgui
-//        ImGui::GetWindowDrawList()->AddRect(ImVec2(center.x - half.x, center.y - half.y),
-//                                            ImVec2(center.x + half.x, center.y + half.y),
+//        ImGui::GetWindowDrawList()->AddRect(ImVec2(center.x - half/2*width, center.y - half/2*height),
+//                                            ImVec2(center.x + half/2*width, center.y + half/2*height),
 //                                            IM_COL32(0, 255, 0, 100));
     // draw point if any
 //    if (octree->nodes[idx].position.w != 0 && children != ROOT) {
