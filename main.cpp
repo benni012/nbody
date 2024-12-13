@@ -33,6 +33,7 @@ int main(int argc, char** argv) {
             {"record", no_argument, nullptr, 'r'},
             {"device", required_argument, nullptr, 'd'},
             {"algo", required_argument, nullptr, 'a'},
+            {"num-particles", required_argument, nullptr, 'n'},
             {nullptr, 0, nullptr, 0}
     };
 
@@ -69,7 +70,7 @@ int main(int argc, char** argv) {
                 }
                 break;
             case 'n':
-                N = atoi(optarg);
+                N = (int)strtod(optarg, nullptr);
                 break;
             default:
                 break;
@@ -83,8 +84,9 @@ int main(int argc, char** argv) {
     }
 #endif
 
-    float4 positions[N];
-    float3 velocities[N];
+    float4 *positions = (float4*)calloc(N, sizeof(float4));
+    float3 *velocities = (float3*)calloc(N, sizeof(float3));
+//    float3 velocities[N];
 
     initGraphics(N, positions);
 
@@ -105,41 +107,32 @@ int main(int argc, char** argv) {
     populate(positions, velocities, N);
 
     while (!glfwWindowShouldClose(window)) {
-        double currentTime = glfwGetTime();
+        double start_time = glfwGetTime();
 //        glfwPollEvents();
 
-        // print first pos to stderr
-        // create octree
-        octree_init(&octree, {0, 0, 0}, {1, 1, 1});
-//        octree_split(&octree, ROOT);
-//        octree_split(&octree, octree.nodes[ROOT].children);
-        // print the node vector to stderr
-//        octree_insert(&octree, {700, 100, 0, 1});
-//        octree_insert(&octree, {100, 100, 0, 1});
-//        for (int i = 0; i < octree.nodes.size(); i++) {
-//            fprintf(stderr, "Node %d: %d\n", i, octree.nodes[i].children);
-//        }
-//        return 0;
+        if (use_bh) {
+            double current_time = start_time;
+            // create octree
+            octree_init(&octree, {0, 0, 0}, {1, 1, 1});
+            for (int i = 0; i < N; i++) {
+                octree_insert(&octree, positions[i]);
+            }
+            fprintf(stderr, "Time for init: %f\n", glfwGetTime() - current_time);
+            current_time = glfwGetTime();
 
-//        return 0;
-        // manually insert 4 pts in quarters
-//        octree_insert(&octree, {-.5, -.5, 0, 1});
-//        octree_insert(&octree, {-.5, .5, 0, 1});
-//        octree_insert(&octree, {.5, -.5, 0, 1});
-//        octree_insert(&octree, {.5, .5, 0, 1});
-//        // and one in the center
-//        octree_insert(&octree, {0, 0, 0, 1});
-
-        for (int i = 0; i < N; i++) {
-            octree_insert(&octree, positions[i]);
+            octree_calculate_proxies(&octree, ROOT);
+            fprintf(stderr, "Time for proxies: %f\n", glfwGetTime() - current_time);
+            current_time = glfwGetTime();
+            cpu_update_bh(N, positions, velocities, &octree);
+            fprintf(stderr, "Time for update: %f\n", glfwGetTime() - current_time);
+        } else {
+            cpu_update_naive(N, positions, velocities);
         }
-        // size of octree print
-        fprintf(stderr, "Octree size: %lu\n", octree.nodes.size());
 
-        cpu_update_naive(N, positions, velocities);
         // time it
-        double frameTime = glfwGetTime() - currentTime;
-        draw(positions, velocities, N, frameTime);
+        float frame_time = glfwGetTime() - start_time;
+        draw(positions, velocities, N, frame_time);
+//        fprintf(stderr, "Hallo");
     }
 
 //    pclose(ffmpeg);

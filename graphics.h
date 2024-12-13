@@ -108,9 +108,15 @@ void setupImGui() {
         fprintf(stderr, "Failed to initialize ImGui OpenGL3 backend\n");
         return;
     }
+
+    // setup hidpi font using FontConfig::RasterizationDensity
+    ImFontConfig fontConfig;
+    fontConfig.RasterizerDensity = 2.f;
+    ImGuiIO& io = ImGui::GetIO();
+    io.Fonts->AddFontDefault(&fontConfig);
 }
 
-void octree_draw(octree_t *octree, int idx) {
+void octree_draw(octree_t *octree, int idx, int depth = 0) {
     int children = octree->nodes[idx].children;
 
     box_t box = octree->nodes[idx].box;
@@ -124,21 +130,21 @@ void octree_draw(octree_t *octree, int idx) {
     half.y = half.y / 2 * height;
 
     // imgui
-    ImGui::GetWindowDrawList()->AddRect(ImVec2(center.x - half.x, center.y - half.y),
-                                        ImVec2(center.x + half.x, center.y + half.y),
-                                        IM_COL32(0, 255, 0, 100));
+//        ImGui::GetWindowDrawList()->AddRect(ImVec2(center.x - half.x, center.y - half.y),
+//                                            ImVec2(center.x + half.x, center.y + half.y),
+//                                            IM_COL32(0, 255, 0, 100));
     // draw point if any
-    if (octree->nodes[idx].position.w != 0 && children == ROOT) {
-        float4 position = octree->nodes[idx].position;
-        position.x = (position.x + 1) / 2 * width;
-        position.y = height - (position.y + 1) / 2 * height;
-//        ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(position.x, position.y), 5, IM_COL32(255, 255, 0, 255));
-    }
+//    if (octree->nodes[idx].position.w != 0 && children != ROOT) {
+//        float4 position = octree->nodes[idx].position;
+//        position.x = (position.x + 1) / 2 * width;
+//        position.y = height - (position.y + 1) / 2 * height;
+//        ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(position.x, position.y), fmax(1, fmin(5, 5-depth)), IM_COL32(255, 255, 0, 255));
+//    }
     if (children == ROOT) {
         return;
     }
     for (int i = 0; i < 8; i++) {
-        octree_draw(octree, children + i);
+        octree_draw(octree, children + i, depth + 1);
     }
 }
 
@@ -261,7 +267,7 @@ void populate(float4 *positions, float3 *velocities, int N) {
     std::normal_distribution<float> distribution(0.0, 100.0);
     for (int i = 0; i < N; i++) {
         float curve = 2 * 3.14159 * (rand() / float(RAND_MAX));
-        float radius = 1 * (rand() / float(RAND_MAX));
+        float radius = .5 * (rand() / float(RAND_MAX));
         float x = cos(curve) - sin(curve);
         float y = cos(curve) + sin(curve);
         float vel = sqrt(6.67e-11 * N * 200 / radius) * 0.05;

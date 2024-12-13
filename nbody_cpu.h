@@ -37,4 +37,21 @@ void cpu_update_naive(int N, float4 *positions, float3 *velocities) {
         positions[i].z += velocities[i].z;
     }
 }
+void cpu_update_bh(int N, float4 *positions, float3 *velocities, octree_t *octree) {
+    // Calculate accelerations
+#pragma omp parallel for
+    for (int i = 0; i < N; i++) {
+        float3 acceleration = octree_calculate_acceleration(octree, positions[i], .9);
+        velocities[i].x += acceleration.x;
+        velocities[i].y += acceleration.y;
+        velocities[i].z += acceleration.z;
+    }
+
+    // Update positions
+    for (int i = 0; i < N; i++) {
+        positions[i].x += velocities[i].x;
+        positions[i].y += velocities[i].y;
+        positions[i].z += velocities[i].z;
+    }
+}
 #endif //NBODY_NBODY_CPU_H
