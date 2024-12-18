@@ -253,8 +253,10 @@ void draw(float4 *positions, float3 *velocities, int N, float frameTime) {
     glfwSwapBuffers(window);
 }
 
-void cleanup() {
+void cleanup(float4 *positions, float3 *velocities) {
     cleanupImGui();
+    free(positions);
+    free(velocities);
     glDeleteVertexArrays(1, &vao);
     glDeleteBuffers(1, &vbo);
     glDeleteProgram(shaderProgram);

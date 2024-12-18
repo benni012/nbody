@@ -85,15 +85,17 @@ int main(int argc, char** argv) {
 
     float4 *positions = (float4*)calloc(N, sizeof(float4));
     float3 *velocities = (float3*)calloc(N, sizeof(float3));
-//    float3 velocities[N];
 
     // Initialize everything
     initGraphics(N, positions);
+#ifdef CUDA_FOUND
     if (use_gpu){
         populate(positions, velocities, N);
         memoryMap(positions, velocities, N);
         setupGPU(positions, velocities, N);
-    } else {
+    } else
+#endif
+    {
         populate(positions, velocities, N);
     }
 
@@ -115,9 +117,12 @@ int main(int argc, char** argv) {
         double start_time = glfwGetTime();
 //        glfwPollEvents();
 
+#ifdef CUDA_FOUND
         if (use_gpu) {
             gpu_update_naive(N, positions, velocities);
-        } else if (use_bh) {
+        } else
+#endif
+        if (use_bh) {
             double current_time = start_time;
             // find min/max of positions
             float3 min = {INFINITY, INFINITY, INFINITY};
@@ -137,31 +142,7 @@ int main(int argc, char** argv) {
             };
             // create octree
             octree_init(&octree, center, fmaxf(max.x - min.x, fmaxf(max.y - min.y, max.z - min.z)));
-//            octree_init(&octree, {0, 0, 0}, 1);
             auto cube = octree.nodes[ROOT].box;
-//            float m = static_cast<float>(1 << 16);
-//
-//            std::sort(positions, positions + N, [&](const float4& a, const float4& b) {
-//                auto z_index = [&](const float4& pos) {
-//                    float normX = (cube.center.x - pos.x) / cube.half_extent + 0.5f;
-//                    float normY = (cube.center.y - pos.y) / cube.half_extent + 0.5f;
-//                    float normZ = (cube.center.z - pos.z) / cube.half_extent + 0.5f;
-//
-//                    uint16_t x = static_cast<uint16_t>(normX * m);
-//                    uint16_t y = static_cast<uint16_t>(normY * m);
-//                    uint16_t z = static_cast<uint16_t>(normZ * m);
-//
-//                    return ZOrder::index_of(x, y, z);
-//                };
-//
-//                return z_index(a) < z_index(b);
-//            });
-
-            // shuffle both positions and velocities (the same though)
-//            std::shuffle(positions, positions + N, std::default_random_engine(42));
-//            std::shuffle(velocities, velocities + N, std::default_random_engine(42));
-
-
             for (int i = 0; i < N; i++) {
                 octree_insert(&octree, positions[i]);
             }
