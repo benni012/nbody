@@ -132,12 +132,15 @@ void octree_draw(octree_t *octree, int idx, int depth = 0) {
 //                                            ImVec2(center.x + half/2*width, center.y + half/2*height),
 //                                            IM_COL32(0, 255, 0, 100));
     // draw point if any
-//    if (octree->nodes[idx].position.w != 0 && children != ROOT) {
-//        float4 position = octree->nodes[idx].position;
-//        position.x = (position.x + 1) / 2 * width;
-//        position.y = height - (position.y + 1) / 2 * height;
-//        ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(position.x, position.y), fmax(1, fmin(5, 5-depth)), IM_COL32(255, 255, 0, 255));
-//    }
+    if (octree->nodes[idx].position.w != 0 && children != ROOT) {
+        float4 position = octree->nodes[idx].position;
+        position.x = (position.x + 1) / 2 * width;
+        position.y = height - (position.y + 1) / 2 * height;
+//        ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(position.x, position.y), fmax(1, fmin(10, 10-depth)), IM_COL32(0, 0, 255, 255));
+        if (depth == 0) {
+            ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(position.x, position.y), 5, IM_COL32(0, 0, 255, 255));
+        }
+    }
     if (children == ROOT) {
         return;
     }
@@ -273,6 +276,7 @@ void populate(float4 *positions, float3 *velocities, int N) {
         positions[i].x = radius * x;
         positions[i].y = radius * y;
         positions[i].z = 0.02 * ((rand() / float(RAND_MAX)) - 0.5);
+//        positions[i].z = 0.0;
 
         velocities[i].x = -y * vel;
         velocities[i].y = x * vel;

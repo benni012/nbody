@@ -30,6 +30,7 @@ void octree_init(octree_t *octree, float3 center, float half_extent) {
 
 void octree_split(octree_t *octree, int node) {
     node_t parent = octree->nodes[node];
+
     float half = parent.box.half_extent;
 
     int children = octree->nodes.size();
@@ -65,23 +66,23 @@ void octree_calculate_proxies(octree_t *octree, int node) {
         octree_calculate_proxies(octree, octree->nodes[node].children + i);
     }
     float4 position = {0, 0, 0, 0};
-    int count = 0;
     for (int i = 0; i < 8; i++) {
         if (octree->nodes[octree->nodes[node].children + i].position.w == 0) {
             continue;
         }
-        position.x += octree->nodes[octree->nodes[node].children + i].position.x;
-        position.y += octree->nodes[octree->nodes[node].children + i].position.y;
-        position.z += octree->nodes[octree->nodes[node].children + i].position.z;
+        position.x += octree->nodes[octree->nodes[node].children + i].position.x * octree->nodes[octree->nodes[node].children + i].position.w;
+        position.y += octree->nodes[octree->nodes[node].children + i].position.y * octree->nodes[octree->nodes[node].children + i].position.w;
+        position.z += octree->nodes[octree->nodes[node].children + i].position.z * octree->nodes[octree->nodes[node].children + i].position.w;
         position.w += octree->nodes[octree->nodes[node].children + i].position.w;
-        count++;
     }
-    if (count == 0) {
+
+    if (position.w == 0) {
         return;
     }
-    position.x /= count;
-    position.y /= count;
-    position.z /= count;
+
+    position.x /= position.w;
+    position.y /= position.w;
+    position.z /= position.w;
     octree->nodes[node].position = position;
 }
 
@@ -136,12 +137,15 @@ float3 octree_calculate_acceleration(octree_t *octree, float4 position, float th
         // if is leaf or approximation criterion is true, calculate acceleration
         if (n.children == ROOT ||
             n.box.half_extent*n.box.half_extent < theta_sq*d_sq) {
+            if (d_sq < 1e-4f) d_sq = 1e-4f;
 
-            float dist_cubed = d_sq * sqrtf(d_sq);
-            float acc = G * n.position.w / (dist_cubed + 1e-4f);
-            acceleration.x += pos_to_pos2.x * acc;
-            acceleration.y += pos_to_pos2.y * acc;
-            acceleration.z += pos_to_pos2.z * acc;
+            float inv_dist = 1.0f / sqrtf(d_sq);
+            float inv_dist_cubed = inv_dist * inv_dist * inv_dist;
+            float acc = G * n.position.w * position.w * inv_dist_cubed;
+
+            acceleration.x += pos_to_pos2.x * acc / position.w;
+            acceleration.y += pos_to_pos2.y * acc / position.w;
+            acceleration.z += pos_to_pos2.z * acc / position.w;
 
             if (n.next == ROOT) {
                 break;

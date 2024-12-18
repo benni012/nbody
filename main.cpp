@@ -25,6 +25,18 @@ typedef struct float3 {
 #include "octree.h"
 octree_t octree;
 
+namespace ZOrder {
+    uint64_t index_of(uint16_t x, uint16_t y, uint16_t z) {
+        uint64_t zIndex = 0;
+        for (int i = 0; i < 16; ++i) {
+            zIndex |= (x & (1 << i)) << (2 * i) |
+                      (y & (1 << i)) << (2 * i + 1) |
+                      (z & (1 << i)) << (2 * i + 2);
+        }
+        return zIndex;
+    }
+}
+
 
 int main(int argc, char** argv) {
     // flags: --record --device=[cpu/gpu] --algo=[bh/naive] -n [number of particles]
@@ -113,24 +125,48 @@ int main(int argc, char** argv) {
         if (use_bh) {
             double current_time = start_time;
             // find min/max of positions
-//            float3 min = {INFINITY, INFINITY, INFINITY};
-//            float3 max = {-INFINITY, -INFINITY, -INFINITY};
-//            for (int i = 0; i < N; i++) {
-//                min.x = fminf(min.x, positions[i].x);
-//                min.y = fminf(min.y, positions[i].y);
-//                min.z = fminf(min.z, positions[i].z);
-//                max.x = fmaxf(max.x, positions[i].x);
-//                max.y = fmaxf(max.y, positions[i].y);
-//                max.z = fmaxf(max.z, positions[i].z);
-//            }
-//            float3 center = {
-//                    (min.x + max.x) / 2,
-//                    (min.y + max.y) / 2,
-//                    (min.z + max.z) / 2
-//            };
+            float3 min = {INFINITY, INFINITY, INFINITY};
+            float3 max = {-INFINITY, -INFINITY, -INFINITY};
+            for (int i = 0; i < N; i++) {
+                min.x = fminf(min.x, positions[i].x);
+                min.y = fminf(min.y, positions[i].y);
+                min.z = fminf(min.z, positions[i].z);
+                max.x = fmaxf(max.x, positions[i].x);
+                max.y = fmaxf(max.y, positions[i].y);
+                max.z = fmaxf(max.z, positions[i].z);
+            }
+            float3 center = {
+                    (min.x + max.x) / 2,
+                    (min.y + max.y) / 2,
+                    (min.z + max.z) / 2
+            };
             // create octree
-//            octree_init(&octree, center, fmaxf(max.x - min.x, fmaxf(max.y - min.y, max.z - min.z)));
-            octree_init(&octree, {0, 0, 0}, 1);
+            octree_init(&octree, center, fmaxf(max.x - min.x, fmaxf(max.y - min.y, max.z - min.z)));
+//            octree_init(&octree, {0, 0, 0}, 1);
+            auto cube = octree.nodes[ROOT].box;
+//            float m = static_cast<float>(1 << 16);
+//
+//            std::sort(positions, positions + N, [&](const float4& a, const float4& b) {
+//                auto z_index = [&](const float4& pos) {
+//                    float normX = (cube.center.x - pos.x) / cube.half_extent + 0.5f;
+//                    float normY = (cube.center.y - pos.y) / cube.half_extent + 0.5f;
+//                    float normZ = (cube.center.z - pos.z) / cube.half_extent + 0.5f;
+//
+//                    uint16_t x = static_cast<uint16_t>(normX * m);
+//                    uint16_t y = static_cast<uint16_t>(normY * m);
+//                    uint16_t z = static_cast<uint16_t>(normZ * m);
+//
+//                    return ZOrder::index_of(x, y, z);
+//                };
+//
+//                return z_index(a) < z_index(b);
+//            });
+
+            // shuffle both positions and velocities (the same though)
+//            std::shuffle(positions, positions + N, std::default_random_engine(42));
+//            std::shuffle(velocities, velocities + N, std::default_random_engine(42));
+
+
             for (int i = 0; i < N; i++) {
                 octree_insert(&octree, positions[i]);
             }
