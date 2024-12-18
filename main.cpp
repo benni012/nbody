@@ -5,12 +5,12 @@
 #include <random>
 #include <chrono>
 #include <getopt.h>
+#include <cstring>
 
 #define G 6.67408e-11
 
-
 #ifdef CUDA_FOUND
-#include "nbody_cuda.h"
+#include "nbody_cuda.cuh"
 #else
 typedef struct float4 {
     float x, y, z, w;
@@ -24,19 +24,6 @@ typedef struct float3 {
 #include "nbody_cpu.h"
 #include "octree.h"
 octree_t octree;
-
-namespace ZOrder {
-    uint64_t index_of(uint16_t x, uint16_t y, uint16_t z) {
-        uint64_t zIndex = 0;
-        for (int i = 0; i < 16; ++i) {
-            zIndex |= (x & (1 << i)) << (2 * i) |
-                      (y & (1 << i)) << (2 * i + 1) |
-                      (z & (1 << i)) << (2 * i + 2);
-        }
-        return zIndex;
-    }
-}
-
 
 int main(int argc, char** argv) {
     // flags: --record --device=[cpu/gpu] --algo=[bh/naive] -n [number of particles]
@@ -100,8 +87,15 @@ int main(int argc, char** argv) {
     float3 *velocities = (float3*)calloc(N, sizeof(float3));
 //    float3 velocities[N];
 
+    // Initialize everything
     initGraphics(N, positions);
-
+    if (use_gpu){
+        populate(positions, velocities, N);
+        memoryMap(positions, velocities, N);
+        setupGPU(positions, velocities, N);
+    } else {
+        populate(positions, velocities, N);
+    }
 
 //    // start ffmpeg telling it to expect raw rgba 720p-60hz frames
 //// -i - tells it to read frames from stdin
@@ -116,13 +110,14 @@ int main(int argc, char** argv) {
 //        return -1;
 //    }
 
-    populate(positions, velocities, N);
 
     while (!glfwWindowShouldClose(window)) {
         double start_time = glfwGetTime();
 //        glfwPollEvents();
 
-        if (use_bh) {
+        if (use_gpu) {
+            gpu_update_naive(N, positions, velocities);
+        } else if (use_bh) {
             double current_time = start_time;
             // find min/max of positions
             float3 min = {INFINITY, INFINITY, INFINITY};
@@ -185,11 +180,10 @@ int main(int argc, char** argv) {
         // time it
         float frame_time = glfwGetTime() - start_time;
         draw(positions, velocities, N, frame_time);
-//        fprintf(stderr, "Hallo");
     }
 
 //    pclose(ffmpeg);
 
-    cleanup();
+    cleanup(positions, velocities);
     return 0;
 }
