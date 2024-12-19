@@ -9,6 +9,7 @@
 
 #define G 6.67408e-11
 
+
 #ifdef CUDA_FOUND
 #include "nbody_cuda.cuh"
 #else
@@ -20,6 +21,12 @@ typedef struct float3 {
     float x, y, z;
 } float3;
 #endif
+
+typedef struct body {
+    float4 position;
+    float3 velocity;
+} body_t;
+
 #include "graphics.h"
 #include "nbody_cpu.h"
 #include "octree.h"
@@ -83,11 +90,10 @@ int main(int argc, char** argv) {
     }
 #endif
 
-    float4 *positions = (float4*)calloc(N, sizeof(float4));
-    float3 *velocities = (float3*)calloc(N, sizeof(float3));
+    body_t *bodies = (body_t*)calloc(N, sizeof(body_t));
 
     // Initialize everything
-    initGraphics(N, positions);
+    initGraphics(N, bodies);
 #ifdef CUDA_FOUND
     if (use_gpu){
         populate(positions, velocities, N);
@@ -96,7 +102,7 @@ int main(int argc, char** argv) {
     } else
 #endif
     {
-        populate(positions, velocities, N);
+        populate(bodies, N);
     }
 
 //    // start ffmpeg telling it to expect raw rgba 720p-60hz frames
@@ -128,12 +134,12 @@ int main(int argc, char** argv) {
             float3 min = {INFINITY, INFINITY, INFINITY};
             float3 max = {-INFINITY, -INFINITY, -INFINITY};
             for (int i = 0; i < N; i++) {
-                min.x = fminf(min.x, positions[i].x);
-                min.y = fminf(min.y, positions[i].y);
-                min.z = fminf(min.z, positions[i].z);
-                max.x = fmaxf(max.x, positions[i].x);
-                max.y = fmaxf(max.y, positions[i].y);
-                max.z = fmaxf(max.z, positions[i].z);
+                min.x = fminf(min.x, bodies[i].position.x);
+                min.y = fminf(min.y, bodies[i].position.y);
+                min.z = fminf(min.z, bodies[i].position.z);
+                max.x = fmaxf(max.x, bodies[i].position.x);
+                max.y = fmaxf(max.y, bodies[i].position.y);
+                max.z = fmaxf(max.z, bodies[i].position.z);
             }
             float3 center = {
                     (min.x + max.x) / 2,
@@ -142,29 +148,26 @@ int main(int argc, char** argv) {
             };
             // create octree
             octree_init(&octree, center, fmaxf(max.x - min.x, fmaxf(max.y - min.y, max.z - min.z)));
-            auto cube = octree.nodes[ROOT].box;
-            for (int i = 0; i < N; i++) {
-                octree_insert(&octree, positions[i]);
-            }
+            octree_build(&octree, bodies, N);
             fprintf(stderr, "Time for init: %f\n", glfwGetTime() - current_time);
             current_time = glfwGetTime();
 
             octree_calculate_proxies(&octree, ROOT);
             fprintf(stderr, "Time for proxies: %f\n", glfwGetTime() - current_time);
             current_time = glfwGetTime();
-            cpu_update_bh(N, positions, velocities, &octree);
+            cpu_update_bh(N, bodies, &octree);
             fprintf(stderr, "Time for update: %f\n", glfwGetTime() - current_time);
         } else {
-            cpu_update_naive(N, positions, velocities);
+            cpu_update_naive(N, bodies);
         }
 
         // time it
         float frame_time = glfwGetTime() - start_time;
-        draw(positions, velocities, N, frame_time);
+        draw(bodies, N, frame_time);
     }
 
 //    pclose(ffmpeg);
 
-    cleanup(positions, velocities);
+    cleanup(bodies);
     return 0;
 }

@@ -132,8 +132,8 @@ void octree_draw(octree_t *octree, int idx, int depth = 0) {
 //                                            ImVec2(center.x + half/2*width, center.y + half/2*height),
 //                                            IM_COL32(0, 255, 0, 100));
     // draw point if any
-    if (octree->nodes[idx].position.w != 0 && children != ROOT) {
-        float4 position = octree->nodes[idx].position;
+    if (octree->nodes[idx].center_of_mass.w != 0 && children != ROOT) {
+        float4 position = octree->nodes[idx].center_of_mass;
         position.x = (position.x + 1) / 2 * width;
         position.y = height - (position.y + 1) / 2 * height;
 //        ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(position.x, position.y), fmax(1, fmin(10, 10-depth)), IM_COL32(0, 0, 255, 255));
@@ -149,7 +149,7 @@ void octree_draw(octree_t *octree, int idx, int depth = 0) {
     }
 }
 
-void initGraphics(int N, float4 *positions) {
+void initGraphics(int N, body_t *bodies) {
     if (!glfwInit()) exit(-1);
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -188,9 +188,11 @@ void initGraphics(int N, float4 *positions) {
 
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, N * sizeof(float4), positions, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, N * sizeof(body_t), bodies, GL_DYNAMIC_DRAW);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
+
+    // TODO
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(body_t), (void *)0);
     glEnableVertexAttribArray(0);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -198,7 +200,7 @@ void initGraphics(int N, float4 *positions) {
 }
 
 
-void draw(float4 *positions, float3 *velocities, int N, float frameTime) {
+void draw(body_t *bodies, int N, float frameTime) {
     glfwPollEvents();
 
     double currentTime = glfwGetTime();
@@ -210,8 +212,8 @@ void draw(float4 *positions, float3 *velocities, int N, float frameTime) {
     glUniform1f(aspectRatioLoc, aspectRatio);
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, N * sizeof(float4), positions);
-    glBufferData(GL_ARRAY_BUFFER, N * sizeof(float4), positions, GL_DYNAMIC_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, N * sizeof(body_t), bodies);
+    glBufferData(GL_ARRAY_BUFFER, N * sizeof(body_t), bodies, GL_DYNAMIC_DRAW);
     glEnable(GL_BLEND);
     glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE);
@@ -235,7 +237,7 @@ void draw(float4 *positions, float3 *velocities, int N, float frameTime) {
 
     // glfwSwapBuffers(window);
 
-    octree_draw(&octree, ROOT);
+//    octree_draw(&octree, ROOT);
 
 
     ImGui::End();
@@ -253,10 +255,9 @@ void draw(float4 *positions, float3 *velocities, int N, float frameTime) {
     glfwSwapBuffers(window);
 }
 
-void cleanup(float4 *positions, float3 *velocities) {
+void cleanup(body_t *bodies) {
     cleanupImGui();
-    free(positions);
-    free(velocities);
+    free(bodies);
     glDeleteVertexArrays(1, &vao);
     glDeleteBuffers(1, &vbo);
     glDeleteProgram(shaderProgram);
@@ -264,7 +265,7 @@ void cleanup(float4 *positions, float3 *velocities) {
     glfwTerminate();
 }
 
-void populate(float4 *positions, float3 *velocities, int N) {
+void populate(body_t *bodies, int N) {
     // Initialize positions, velocities, and masses
     std::default_random_engine generator(42);
     std::normal_distribution<float> distribution(0.0, 100.0);
@@ -274,15 +275,15 @@ void populate(float4 *positions, float3 *velocities, int N) {
         float x = cos(curve) - sin(curve);
         float y = cos(curve) + sin(curve);
         float vel = sqrt(6.67e-11 * N * 200 / radius) * 0.05;
-        positions[i].w = 7.;
-        positions[i].x = radius * x;
-        positions[i].y = radius * y;
-        positions[i].z = 0.02 * ((rand() / float(RAND_MAX)) - 0.5);
+        bodies[i].position.w = 7.;
+        bodies[i].position.x = radius * x;
+        bodies[i].position.y = radius * y;
+        bodies[i].position.z = 0.02 * ((rand() / float(RAND_MAX)) - 0.5);
 //        positions[i].z = 0.0;
 
-        velocities[i].x = -y * vel;
-        velocities[i].y = x * vel;
-        velocities[i].z = 0.0;
+        bodies[i].velocity.x = -y * vel;
+        bodies[i].velocity.y = x * vel;
+        bodies[i].velocity.z = 0.0;
     }
 }
 
