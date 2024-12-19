@@ -5,7 +5,7 @@
 #ifndef NBODY_OCTREE_H
 #define NBODY_OCTREE_H
 #define ROOT 0
-#define LEAF_CAPACITY 32
+#define LEAF_CAPACITY 16
 #include <vector>
 #include <functional>
 
@@ -45,65 +45,79 @@ void octree_split(octree_t *octree, int node, body_t *bodies) {
     float3 center = parent.box.center;
     int split[] = {parent.pos_idx, 0, 0, 0, 0, 0, 0, 0, parent.pos_idx+parent.count};
 
-    // sort bodies in-place by z
-    std::sort(bodies + split[0], bodies + split[8], [](body_t a, body_t b) {
-        return a.position.z < b.position.z;
-    });
-    // find where to split (where z > center.z)
-    split[4] = find_split(bodies, split[0], split[8], [&center](body_t a) -> bool {
-        return a.position.z > center.z;
-    });
+    split[4] = std::partition(bodies + split[0], bodies + split[8], [&center](body_t a) -> bool {
+        return a.position.z < center.z;
+    }) - bodies;
 
-    // sort bodies in-place by y and z < center.z
-    std::sort(bodies + split[0], bodies + split[4], [](body_t a, body_t b) {
-        return a.position.y < b.position.y;
-    });
-    // find where to split (where y > center.y) and z < center.z
-    split[2] = find_split(bodies, split[0], split[4], [&center](body_t a) -> bool {
-        return a.position.y > center.y;
-    });
-    // sort bodies in-place by y < center.y and z > center.z
-    std::sort(bodies + split[4], bodies + split[8], [](body_t a, body_t b) {
-        return a.position.y < b.position.y;
-    });
-    // find where to split (where y > center.y) and z > center.z
-    split[6] = find_split(bodies, split[4], split[8], [&center](body_t a) -> bool {
-        return a.position.y > center.y;
-    });
+//    // sort bodies in-place by y and z < center.z
+//    std::sort(bodies + split[0], bodies + split[4], [](body_t a, body_t b) {
+//        return a.position.y < b.position.y;
+//    });
+//    // find where to split (where y > center.y) and z < center.z
+//    split[2] = find_split(bodies, split[0], split[4], [&center](body_t a) -> bool {
+//        return a.position.y > center.y;
+//    });
+//    // sort bodies in-place by y < center.y and z > center.z
+//    std::sort(bodies + split[4], bodies + split[8], [](body_t a, body_t b) {
+//        return a.position.y < b.position.y;
+//    });
+//    // find where to split (where y > center.y) and z > center.z
+//    split[6] = find_split(bodies, split[4], split[8], [&center](body_t a) -> bool {
+//        return a.position.y > center.y;
+//    });
+//
+//
+//    // sort bodies in-place by x and z < center.z
+//    std::sort(bodies + split[0], bodies + split[2], [](body_t a, body_t b) {
+//        return a.position.x < b.position.x;
+//    });
+//    // find where to split (where x > center.x) and z < center.z
+//    split[1] = find_split(bodies, split[0], split[2], [&center](body_t a) -> bool {
+//        return a.position.x > center.x;
+//    });
+//    // sort bodies in-place by x < center.x and z > center.z
+//    std::sort(bodies + split[2], bodies + split[4], [](body_t a, body_t b) {
+//        return a.position.x < b.position.x;
+//    });
+//    // find where to split (where x > center.x) and z < center.z
+//    split[3] = find_split(bodies, split[2], split[4], [&center](body_t a) -> bool {
+//        return a.position.x > center.x;
+//    });
+//    // sort bodies in-place by x and z > center.z
+//    std::sort(bodies + split[4], bodies + split[6], [](body_t a, body_t b) {
+//        return a.position.x < b.position.x;
+//    });
+//    // find where to split (where x > center.x) and z > center.z
+//    split[5] = find_split(bodies, split[4], split[6], [&center](body_t a) -> bool {
+//        return a.position.x > center.x;
+//    });
+//    // sort bodies in-place by x < center.x and z > center.z
+//    std::sort(bodies + split[6], bodies + split[8], [](body_t a, body_t b) {
+//        return a.position.x < b.position.x;
+//    });
+//    // find where to split (where x > center.x) and z > center.z
+//    split[7] = find_split(bodies, split[6], split[8], [&center](body_t a) -> bool {
+//        return a.position.x > center.x;
+//    });
 
-
-    // sort bodies in-place by x and z < center.z
-    std::sort(bodies + split[0], bodies + split[2], [](body_t a, body_t b) {
-        return a.position.x < b.position.x;
-    });
-    // find where to split (where x > center.x) and z < center.z
-    split[1] = find_split(bodies, split[0], split[2], [&center](body_t a) -> bool {
-        return a.position.x > center.x;
-    });
-    // sort bodies in-place by x < center.x and z > center.z
-    std::sort(bodies + split[2], bodies + split[4], [](body_t a, body_t b) {
-        return a.position.x < b.position.x;
-    });
-    // find where to split (where x > center.x) and z < center.z
-    split[3] = find_split(bodies, split[2], split[4], [&center](body_t a) -> bool {
-        return a.position.x > center.x;
-    });
-    // sort bodies in-place by x and z > center.z
-    std::sort(bodies + split[4], bodies + split[6], [](body_t a, body_t b) {
-        return a.position.x < b.position.x;
-    });
-    // find where to split (where x > center.x) and z > center.z
-    split[5] = find_split(bodies, split[4], split[6], [&center](body_t a) -> bool {
-        return a.position.x > center.x;
-    });
-    // sort bodies in-place by x < center.x and z > center.z
-    std::sort(bodies + split[6], bodies + split[8], [](body_t a, body_t b) {
-        return a.position.x < b.position.x;
-    });
-    // find where to split (where x > center.x) and z > center.z
-    split[7] = find_split(bodies, split[6], split[8], [&center](body_t a) -> bool {
-        return a.position.x > center.x;
-    });
+    split[2] = std::partition(bodies + split[0], bodies + split[4], [&center](body_t a) -> bool {
+        return a.position.y < center.y;
+    }) - bodies;
+    split[6] = std::partition(bodies + split[4], bodies + split[8], [&center](body_t a) -> bool {
+        return a.position.y < center.y;
+    }) - bodies;
+    split[1] = std::partition(bodies + split[0], bodies + split[2], [&center](body_t a) -> bool {
+        return a.position.x < center.x;
+    }) - bodies;
+    split[3] = std::partition(bodies + split[2], bodies + split[4], [&center](body_t a) -> bool {
+        return a.position.x < center.x;
+    }) - bodies;
+    split[5] = std::partition(bodies + split[4], bodies + split[6], [&center](body_t a) -> bool {
+        return a.position.x < center.x;
+    }) - bodies;
+    split[7] = std::partition(bodies + split[6], bodies + split[8], [&center](body_t a) -> bool {
+        return a.position.x < center.x;
+    }) - bodies;
 
 
     float half = parent.box.half_extent;
@@ -196,11 +210,6 @@ float3 octree_calculate_acceleration(octree_t *octree, float4 position, body_t *
     float3 acceleration = {0, 0, 0};
     while (true) {
         node_t n = octree->nodes[node];
-        float dx = n.center_of_mass.x - position.x;
-        float dy = n.center_of_mass.y - position.y;
-        float dz = n.center_of_mass.z - position.z;
-        float d_sq = dx * dx + dy * dy + dz * dz;
-
         if (n.children == ROOT) { // leaf
             for (int i = n.pos_idx; i < n.pos_idx+n.count; i++) {
                 float4 other = bodies[i].position;
@@ -222,23 +231,29 @@ float3 octree_calculate_acceleration(octree_t *octree, float4 position, body_t *
                 break;
             }
             node = n.next;
-        } else if (n.box.half_extent*n.box.half_extent < theta_sq*d_sq) { // approximation criterion
-            if (d_sq < 1e-4f) d_sq = 1e-4f;
-
-            float inv_dist = 1.0f / sqrtf(d_sq);
-            float inv_dist_cubed = inv_dist * inv_dist * inv_dist;
-            float acc = G * n.center_of_mass.w * inv_dist_cubed;
-
-            acceleration.x += dx * acc;
-            acceleration.y += dy * acc;
-            acceleration.z += dz * acc;
-
-            if (n.next == ROOT) {
-                break;
-            }
-            node = n.next;
         } else {
-            node = n.children;
+            float dx = n.center_of_mass.x - position.x;
+            float dy = n.center_of_mass.y - position.y;
+            float dz = n.center_of_mass.z - position.z;
+            float d_sq = dx * dx + dy * dy + dz * dz;
+            if (n.box.half_extent * n.box.half_extent < theta_sq * d_sq) { // approximation criterion
+                if (d_sq < 1e-4f) d_sq = 1e-4f;
+
+                float inv_dist = 1.0f / sqrtf(d_sq);
+                float inv_dist_cubed = inv_dist * inv_dist * inv_dist;
+                float acc = G * n.center_of_mass.w * inv_dist_cubed;
+
+                acceleration.x += dx * acc;
+                acceleration.y += dy * acc;
+                acceleration.z += dz * acc;
+
+                if (n.next == ROOT) {
+                    break;
+                }
+                node = n.next;
+            } else {
+                node = n.children;
+            }
         }
     }
     return acceleration;
