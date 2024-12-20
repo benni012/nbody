@@ -92,7 +92,7 @@ const char* fragmentShaderSource = R"(
     #version 150 core
     out vec4 FragColor;
     void main() {
-        FragColor = vec4(1.0, .3, .1, 1.0);
+        FragColor = vec4(.5, .1, .05, 1.0);
     }
 )";
 
@@ -117,6 +117,8 @@ void setupImGui() {
 }
 
 void octree_draw(octree_t *octree, int idx, int depth = 0) {
+//    return;
+    const int draw_depth = 1;
     int children = octree->nodes[idx].children;
 
     box_t box = octree->nodes[idx].box;
@@ -128,16 +130,18 @@ void octree_draw(octree_t *octree, int idx, int depth = 0) {
     center.y = height - (center.y + 1) / 2 * height;
 
     // imgui
-//        ImGui::GetWindowDrawList()->AddRect(ImVec2(center.x - half/2*width, center.y - half/2*height),
-//                                            ImVec2(center.x + half/2*width, center.y + half/2*height),
-//                                            IM_COL32(0, 255, 0, 100));
+    if (depth == draw_depth)
+        ImGui::GetWindowDrawList()->AddRect(ImVec2(center.x - half/2*width, center.y - half/2*height),
+                                            ImVec2(center.x + half/2*width, center.y + half/2*height),
+                                            IM_COL32(0, 255, 0, 100));
+
     // draw point if any
     if (octree->nodes[idx].center_of_mass.w != 0 && children != ROOT) {
         float4 position = octree->nodes[idx].center_of_mass;
         position.x = (position.x + 1) / 2 * width;
         position.y = height - (position.y + 1) / 2 * height;
 //        ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(position.x, position.y), fmax(1, fmin(10, 10-depth)), IM_COL32(0, 0, 255, 255));
-        if (depth == 0) {
+        if (depth == draw_depth) {
             ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(position.x, position.y), 5, IM_COL32(0, 0, 255, 255));
         }
     }
@@ -191,7 +195,6 @@ void initGraphics(int N, body_t *bodies) {
     glBufferData(GL_ARRAY_BUFFER, N * sizeof(body_t), bodies, GL_DYNAMIC_DRAW);
 
 
-    // TODO
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(body_t), (void *)0);
     glEnableVertexAttribArray(0);
 
@@ -279,7 +282,7 @@ void populate(body_t *bodies, int N) {
         bodies[i].position.x = radius * x;
         bodies[i].position.y = radius * y;
         bodies[i].position.z = 0.02 * ((rand() / float(RAND_MAX)) - 0.5);
-//        positions[i].z = 0.0;
+//        bodies[i].position.z = 0;
 
         bodies[i].velocity.x = -y * vel;
         bodies[i].velocity.y = x * vel;

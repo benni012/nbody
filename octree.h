@@ -48,58 +48,6 @@ void octree_split(octree_t *octree, int node, body_t *bodies) {
     split[4] = std::partition(bodies + split[0], bodies + split[8], [&center](body_t a) -> bool {
         return a.position.z < center.z;
     }) - bodies;
-
-//    // sort bodies in-place by y and z < center.z
-//    std::sort(bodies + split[0], bodies + split[4], [](body_t a, body_t b) {
-//        return a.position.y < b.position.y;
-//    });
-//    // find where to split (where y > center.y) and z < center.z
-//    split[2] = find_split(bodies, split[0], split[4], [&center](body_t a) -> bool {
-//        return a.position.y > center.y;
-//    });
-//    // sort bodies in-place by y < center.y and z > center.z
-//    std::sort(bodies + split[4], bodies + split[8], [](body_t a, body_t b) {
-//        return a.position.y < b.position.y;
-//    });
-//    // find where to split (where y > center.y) and z > center.z
-//    split[6] = find_split(bodies, split[4], split[8], [&center](body_t a) -> bool {
-//        return a.position.y > center.y;
-//    });
-//
-//
-//    // sort bodies in-place by x and z < center.z
-//    std::sort(bodies + split[0], bodies + split[2], [](body_t a, body_t b) {
-//        return a.position.x < b.position.x;
-//    });
-//    // find where to split (where x > center.x) and z < center.z
-//    split[1] = find_split(bodies, split[0], split[2], [&center](body_t a) -> bool {
-//        return a.position.x > center.x;
-//    });
-//    // sort bodies in-place by x < center.x and z > center.z
-//    std::sort(bodies + split[2], bodies + split[4], [](body_t a, body_t b) {
-//        return a.position.x < b.position.x;
-//    });
-//    // find where to split (where x > center.x) and z < center.z
-//    split[3] = find_split(bodies, split[2], split[4], [&center](body_t a) -> bool {
-//        return a.position.x > center.x;
-//    });
-//    // sort bodies in-place by x and z > center.z
-//    std::sort(bodies + split[4], bodies + split[6], [](body_t a, body_t b) {
-//        return a.position.x < b.position.x;
-//    });
-//    // find where to split (where x > center.x) and z > center.z
-//    split[5] = find_split(bodies, split[4], split[6], [&center](body_t a) -> bool {
-//        return a.position.x > center.x;
-//    });
-//    // sort bodies in-place by x < center.x and z > center.z
-//    std::sort(bodies + split[6], bodies + split[8], [](body_t a, body_t b) {
-//        return a.position.x < b.position.x;
-//    });
-//    // find where to split (where x > center.x) and z > center.z
-//    split[7] = find_split(bodies, split[6], split[8], [&center](body_t a) -> bool {
-//        return a.position.x > center.x;
-//    });
-
     split[2] = std::partition(bodies + split[0], bodies + split[4], [&center](body_t a) -> bool {
         return a.position.y < center.y;
     }) - bodies;
@@ -201,7 +149,6 @@ void octree_build(octree_t *octree, body_t *bodies, int N) {
         }
         node++;
     }
-    octree_calculate_proxies(octree, ROOT);
 }
 
 float3 octree_calculate_acceleration(octree_t *octree, float4 position, body_t *bodies, float theta) {
@@ -210,7 +157,26 @@ float3 octree_calculate_acceleration(octree_t *octree, float4 position, body_t *
     float3 acceleration = {0, 0, 0};
     while (true) {
         node_t n = octree->nodes[node];
-        if (n.children == ROOT) { // leaf
+        float dx = n.center_of_mass.x - position.x;
+        float dy = n.center_of_mass.y - position.y;
+        float dz = n.center_of_mass.z - position.z;
+        float d_sq = dx * dx + dy * dy + dz * dz;
+
+        if (n.box.half_extent*n.box.half_extent < theta_sq*d_sq) { // approximation criterion
+            if (d_sq < 1e-4f) d_sq = 1e-4f;
+
+            float dc = sqrtf(d_sq) * d_sq;
+            float acc = G * n.center_of_mass.w / dc;
+
+            acceleration.x += dx * acc;
+            acceleration.y += dy * acc;
+            acceleration.z += dz * acc;
+
+            if (n.next == ROOT) {
+                break;
+            }
+            node = n.next;
+        } else if (n.children == ROOT) { // leaf
             for (int i = n.pos_idx; i < n.pos_idx+n.count; i++) {
                 float4 other = bodies[i].position;
                 float dx = other.x - position.x;
@@ -219,9 +185,8 @@ float3 octree_calculate_acceleration(octree_t *octree, float4 position, body_t *
                 float d_sq = dx * dx + dy * dy + dz * dz;
                 if (d_sq < 1e-4f) d_sq = 1e-4f;
 
-                float inv_dist = 1.0f / sqrtf(d_sq);
-                float inv_dist_cubed = inv_dist * inv_dist * inv_dist;
-                float acc = G * other.w * inv_dist_cubed;
+                float dc = sqrtf(d_sq) * d_sq;
+                float acc = G * other.w / dc;
 
                 acceleration.x += dx * acc;
                 acceleration.y += dy * acc;
@@ -232,65 +197,9 @@ float3 octree_calculate_acceleration(octree_t *octree, float4 position, body_t *
             }
             node = n.next;
         } else {
-            float dx = n.center_of_mass.x - position.x;
-            float dy = n.center_of_mass.y - position.y;
-            float dz = n.center_of_mass.z - position.z;
-            float d_sq = dx * dx + dy * dy + dz * dz;
-            if (n.box.half_extent * n.box.half_extent < theta_sq * d_sq) { // approximation criterion
-                if (d_sq < 1e-4f) d_sq = 1e-4f;
-
-                float inv_dist = 1.0f / sqrtf(d_sq);
-                float inv_dist_cubed = inv_dist * inv_dist * inv_dist;
-                float acc = G * n.center_of_mass.w * inv_dist_cubed;
-
-                acceleration.x += dx * acc;
-                acceleration.y += dy * acc;
-                acceleration.z += dz * acc;
-
-                if (n.next == ROOT) {
-                    break;
-                }
-                node = n.next;
-            } else {
-                node = n.children;
-            }
+            node = n.children;
         }
     }
     return acceleration;
 }
 #endif //NBODY_OCTREE_H
-//void octree_insert(octree_t *octree, float4 position) {
-//    int current = ROOT;
-//    float half = octree->nodes[current].box.half_extent;
-//    float3 center = octree->nodes[current].box.center;
-//    // check if within bounds
-//    if (position.x < center.x - half ||
-//        position.x > center.x + half ||
-//        position.y < center.y - half ||
-//        position.y > center.y + half ||
-//        position.z < center.z - half ||
-//        position.z > center.z + half) {
-//        return;
-//    }
-//    while (octree->nodes[current].children != ROOT) {
-//        int child = 0;
-//        if (position.x > octree->nodes[current].box.center.x) child |= 1;
-//        if (position.y > octree->nodes[current].box.center.y) child |= 2;
-//        if (position.z > octree->nodes[current].box.center.z) child |= 4;
-//        current = octree->nodes[current].children + child;
-//    }
-//    int leaf = current;
-//    if (octree->nodes[leaf].position.w == 0) {
-//        octree->nodes[leaf].position = position;
-//    } else if (position.x == octree->nodes[leaf].position.x &&
-//               position.y == octree->nodes[leaf].position.y &&
-//               position.z == octree->nodes[leaf].position.z) {
-//        octree->nodes[leaf].position.w += position.w;
-//    } else {
-//        octree_split(octree, leaf);
-//        float4 old_position = octree->nodes[leaf].position;
-//        octree_insert(octree, position);
-//        octree_insert(octree, old_position);
-//        octree->nodes[leaf].position = {0, 0, 0, 0};
-//    }
-//}

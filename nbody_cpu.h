@@ -41,7 +41,7 @@ void cpu_update_bh(int N, body_t *bodies, octree_t *octree) {
     // Calculate accelerations
 #pragma omp parallel for
     for (int i = 0; i < N; i++) {
-        float3 acceleration = octree_calculate_acceleration(octree, bodies[i].position, bodies, 0.9);
+        float3 acceleration = octree_calculate_acceleration(octree, bodies[i].position, bodies, 0.8);
         bodies[i].velocity.x += acceleration.x;
         bodies[i].velocity.y += acceleration.y;
         bodies[i].velocity.z += acceleration.z;
