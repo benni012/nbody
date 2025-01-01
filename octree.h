@@ -8,7 +8,7 @@
 #define LEAF_CAPACITY 16
 #include <vector>
 #include <functional>
-
+#include <algorithm>
 typedef struct box {
     float3 center;
     float half_extent;
@@ -37,6 +37,7 @@ int find_split(body_t *bodies, int start, int end, std::function<bool(body_t)> f
             return i;
         }
     }
+    return -1;
 }
 
 void octree_split(octree_t *octree, int node, body_t *bodies) {

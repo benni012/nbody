@@ -1,11 +1,8 @@
 #ifndef NBODY_NBODY_CUDA_H
 #define NBODY_NBODY_CUDA_H
 
-#include <cuda.h>
-#include <cuda_runtime.h>
+#include "body.h"
 #include <stdio.h>
-
-#define BLOCK_SIZE 256
 
 // CUDA error-checking macro
 #define cudaCheckErrors(msg)                                                   \
@@ -23,9 +20,9 @@ __global__ void naive_kernel(float4 *positions, float3 *velocities, int pointCou
 __global__ void update_kernel(float4 *positions, float3 *velocities, int pointCount);
 
 // Function declarations
-void pinMem(float4 *positions, float3 *velocities, int N);
-void setupGPU(float4 *positions, float3 *velocities, int N);
-void cleanup(float4 *positions, float3 *velocities);
-void gpu_update_naive(int N, float4 *positions, float3 *velocities);
+void pinMem(int N, body_t *bodies);
+void setupGPU(body_t *bodies, int N);
+void cleanupGPU(body_t *bodies);
+void gpu_update_naive(int N, body_t *bodies);
 
 #endif // NBODY_NBODY_CUDA_H

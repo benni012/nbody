@@ -4,11 +4,24 @@ project(nbody LANGUAGES CXX)
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 
+# Check if CUDA is available
+include(CheckLanguage)
+check_language(CUDA)
+if(CMAKE_CUDA_COMPILER)
+    message(STATUS "CUDA compiler found: ${CMAKE_CUDA_COMPILER}")
+    enable_language(CUDA)
+    set(HAS_CUDA TRUE)
+else()
+    message(WARNING "CUDA compiler not found. GPU support will not be enabled.")
+    set(HAS_CUDA FALSE)
+endif()
+
 # Executable nbody
 add_executable(nbody
     nbody_cuda.cuh
     nbody_cuda.cu
     graphics.h
+    body.h
     nbody_cpu.h
     main.cpp
 )
@@ -46,9 +59,8 @@ target_link_libraries(nbody
 )
 
 # GPU version (CUDA-based)
-find_package(CUDA)
-if(CUDA_FOUND)
-    message(STATUS "CUDA found. Adding GPU support.")
+if(HAS_CUDA)
+    message(STATUS "Adding GPU support with CUDA.")
     # https://developer.nvidia.com/blog/cuda-pro-tip-flush-denormals-confidence/
     # https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#math-libraries
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -arch=sm_60 -rdc=true -ftz=true -O3")
@@ -61,3 +73,4 @@ else()
 endif()
 
 target_compile_options(nbody PRIVATE -O3)
+

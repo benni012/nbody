@@ -1,9 +1,12 @@
+#include "body.h"
 #include "nbody_cuda.cuh"
+#include <cstddef>
+
+#define BLOCK_SIZE 1024
 #define nStreams 4
 
 // constant memory
-__constant__ float G  = 6.67408e-11;
-
+__constant__ float G = 6.67408e-11;
 
 int numBlocks;
 int totalPairs;
@@ -12,6 +15,7 @@ int numPairBlocks;
 int updateChunks;
 int updateBlocks;
 
+float4 *pinned_positions;
 float4 *d_positions;
 float3 *d_velocities;
 
@@ -40,7 +44,8 @@ __global__ void naive_kernel(float4 *positions, float3 *velocities,
       float dx = other_pos.x - particle_pos.x;
       float dy = other_pos.y - particle_pos.y;
       float dz = other_pos.z - particle_pos.z;
-      float distSq = fmaxf(dx * dx + dy * dy + dz * dz, 1e-4f); // Avoid small distances
+      float distSq =
+          fmaxf(dx * dx + dy * dy + dz * dz, 1e-4f); // Avoid small distances
       float invDist = rsqrtf(distSq);
       float invDist3 = invDist * invDist * invDist;
       float force = G * particle_pos.w * other_pos.w * invDist3;
@@ -52,7 +57,6 @@ __global__ void naive_kernel(float4 *positions, float3 *velocities,
     __syncthreads();
   }
 }
-
 __global__ void update_kernel(float4 *positions, float3 *velocities,
                               int pointCount) {
   int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -63,12 +67,12 @@ __global__ void update_kernel(float4 *positions, float3 *velocities,
   }
 }
 
-void pinMem(float4 *positions, float3 *velocities, int N) {
-  cudaMallocHost(&positions, N * sizeof(float4));
-  cudaMallocHost(&velocities, N * sizeof(float3));
+void pinMem(int N, body_t *bodies) {
+  cudaMallocHost(&bodies, N * sizeof(body_t));
+  cudaMallocHost(&pinned_positions, N * sizeof(float4));
 }
 
-void setupGPU(float4 *positions, float3 *velocities, int N) {
+void setupGPU(body_t *bodies, int N) {
   numBlocks = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
   totalPairs = (N * (N - 1)) / 2;
   numPairBlocks = (totalPairs + BLOCK_SIZE - 1) / BLOCK_SIZE;
@@ -79,10 +83,21 @@ void setupGPU(float4 *positions, float3 *velocities, int N) {
   cudaMalloc(&d_positions, N * sizeof(float4));
   cudaMalloc(&d_velocities, N * sizeof(float3));
 
+  // Copy positions and velocities from bodies to device
+  float4 *positions = new float4[N];
+  float3 *velocities = new float3[N];
+  for (int i = 0; i < N; ++i) {
+    positions[i] = bodies[i].position;
+    velocities[i] = bodies[i].velocity;
+  }
+
   cudaMemcpy(d_positions, positions, N * sizeof(float4),
              cudaMemcpyHostToDevice);
   cudaMemcpy(d_velocities, velocities, N * sizeof(float3),
              cudaMemcpyHostToDevice);
+
+  delete[] positions;
+  delete[] velocities;
 
   // Create Streams
   for (int i = 0; i < nStreams; ++i) {
@@ -90,26 +105,31 @@ void setupGPU(float4 *positions, float3 *velocities, int N) {
   }
 }
 
-void gpu_update_naive(int N, float4 *positions, float3 *velocities) {
-
+void gpu_update_naive(int N, body_t *bodies) {
+  // Launch naive kernel
   naive_kernel<<<numPairBlocks, BLOCK_SIZE>>>(d_positions, d_velocities, N);
   cudaDeviceSynchronize();
   cudaCheckErrors("STEP Kernel execution failed");
 
+  // Launch update kernel for each stream
   for (int i = 0; i < nStreams; ++i) {
     int offset = i * updateChunks;
     int currentChunkSize = std::min(updateChunks, N - offset);
 
     if (currentChunkSize > 0) {
       // Launch update kernel on the current stream
-      update_kernel<<<numBlocks, BLOCK_SIZE, 0, streams[i]>>>(
+      update_kernel<<<numBlocks, BLOCK_SIZE, 1, streams[i]>>>(
           d_positions + offset, d_velocities + offset, currentChunkSize);
       cudaCheckErrors("UPDATE Kernel execution failed");
 
-      // // Perform asynchronous memory copy from device to host
-      cudaMemcpyAsync(positions + offset, d_positions + offset,
+      cudaMemcpyAsync(pinned_positions, d_positions + offset,
                       currentChunkSize * sizeof(float4), cudaMemcpyDeviceToHost,
                       streams[i]);
+
+      cudaStreamSynchronize(streams[i]); // Wait for the copy to complete
+      for (int j = 0; j < currentChunkSize; ++j) {
+        bodies[offset + j].position = pinned_positions[j];
+      }
     }
   }
 
@@ -117,19 +137,11 @@ void gpu_update_naive(int N, float4 *positions, float3 *velocities) {
   for (int i = 0; i < nStreams; ++i) {
     cudaStreamSynchronize(streams[i]);
   }
-
-  // update_kernel<<<numBlocks, BLOCK_SIZE>>>(d_positions, d_velocities, N);
-  // cudaDeviceSynchronize();
-  // cudaCheckErrors("UPDATE Kernel execution failed");
-  // cudaMemcpy(positions, d_positions, N * sizeof(float4),
-  // cudaMemcpyDeviceToHost);
 }
-
-void cleanup(float4 *positions, float3 *velocities) {
+void cleanupGPU(body_t *bodies) {
   cudaFree(d_positions);
   cudaFree(d_velocities);
-  cudaFreeHost(positions);
-  cudaFreeHost(velocities);
+  cudaFreeHost(bodies);
 
   // Destroy streams
   for (int i = 0; i < nStreams; ++i) {
