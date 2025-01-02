@@ -2,8 +2,8 @@
 #include "nbody_cuda.cuh"
 #include <cstddef>
 
-#define BLOCK_SIZE 1024
-#define nStreams 4
+#define BLOCK_SIZE 512
+#define nStreams 1
 
 // constant memory
 __constant__ float G = 6.67408e-11;
@@ -15,61 +15,61 @@ int numPairBlocks;
 int updateChunks;
 int updateBlocks;
 
-float4 *pinned_positions;
-float4 *d_positions;
-float3 *d_velocities;
+body_t *d_bodies;
 
 cudaStream_t streams[nStreams];
 
-__global__ void naive_kernel(float4 *positions, float3 *velocities,
-                             int pointCount) {
+__global__ void naive_kernel(body_t *bodies, int pointCount) {
   int particle_idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (particle_idx >= pointCount)
     return;
-  float4 particle_pos = positions[particle_idx]; // load into register
+
+  float4 particle = bodies[particle_idx].position; // Load into register
 
   __shared__ float4 shared_pos[BLOCK_SIZE];
   for (int i = 0; i < pointCount; i += BLOCK_SIZE) {
     int other_idx = i + threadIdx.x;
+
     if (other_idx >= pointCount)
       return;
-    shared_pos[threadIdx.x] = positions[other_idx];
+    shared_pos[threadIdx.x] = bodies[other_idx].position;
 
     __syncthreads();
+
 #pragma unroll
     for (int j = 0; j < BLOCK_SIZE; j++) {
-      if (i + j >= pointCount)
-        break;
-      float4 other_pos = shared_pos[j]; // load into register
-      float dx = other_pos.x - particle_pos.x;
-      float dy = other_pos.y - particle_pos.y;
-      float dz = other_pos.z - particle_pos.z;
-      float distSq =
-          fmaxf(dx * dx + dy * dy + dz * dz, 1e-4f); // Avoid small distances
+      if (i + j >= pointCount) break;
+
+      float4 other = shared_pos[j]; // Load into register
+      float dx = other.x - particle.x;
+      float dy = other.y - particle.y;
+      float dz = other.z - particle.z;
+
+      float distSq = fmaxf(dx * dx + dy * dy + dz * dz, 1e-4f); // Avoid small distances
       float invDist = rsqrtf(distSq);
       float invDist3 = invDist * invDist * invDist;
-      float force = G * particle_pos.w * other_pos.w * invDist3;
-      float fw = force / particle_pos.w;
-      velocities[particle_idx].x += dx * fw;
-      velocities[particle_idx].y += dy * fw;
-      velocities[particle_idx].z += dz * fw;
+      float force = G * particle.w * other.w * invDist3;
+      float fw = force/particle.w;
+      bodies[particle_idx].velocity.x += dx * fw ;
+      bodies[particle_idx].velocity.y += dy * fw ;
+      bodies[particle_idx].velocity.z += dz * fw ;
     }
     __syncthreads();
   }
 }
-__global__ void update_kernel(float4 *positions, float3 *velocities,
-                              int pointCount) {
+
+__global__ void update_kernel(body_t *bodies, int pointCount) {
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i < pointCount) {
-    atomicAdd(&positions[i].x, velocities[i].x);
-    atomicAdd(&positions[i].y, velocities[i].y);
-    atomicAdd(&positions[i].z, velocities[i].z);
+    atomicAdd(&bodies[i].position.x, bodies[i].velocity.x);
+    atomicAdd(&bodies[i].position.y, bodies[i].velocity.y);
+    atomicAdd(&bodies[i].position.z, bodies[i].velocity.z);
   }
+  __syncthreads();
 }
 
 void pinMem(int N, body_t *bodies) {
   cudaMallocHost(&bodies, N * sizeof(body_t));
-  cudaMallocHost(&pinned_positions, N * sizeof(float4));
 }
 
 void setupGPU(body_t *bodies, int N) {
@@ -80,24 +80,8 @@ void setupGPU(body_t *bodies, int N) {
   updateChunks = (N + nStreams - 1) / nStreams;
   updateBlocks = (updateChunks + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-  cudaMalloc(&d_positions, N * sizeof(float4));
-  cudaMalloc(&d_velocities, N * sizeof(float3));
-
-  // Copy positions and velocities from bodies to device
-  float4 *positions = new float4[N];
-  float3 *velocities = new float3[N];
-  for (int i = 0; i < N; ++i) {
-    positions[i] = bodies[i].position;
-    velocities[i] = bodies[i].velocity;
-  }
-
-  cudaMemcpy(d_positions, positions, N * sizeof(float4),
-             cudaMemcpyHostToDevice);
-  cudaMemcpy(d_velocities, velocities, N * sizeof(float3),
-             cudaMemcpyHostToDevice);
-
-  delete[] positions;
-  delete[] velocities;
+  cudaMalloc(&d_bodies, N * sizeof(body_t));
+  cudaMemcpy(d_bodies, bodies, N * sizeof(body_t), cudaMemcpyHostToDevice);
 
   // Create Streams
   for (int i = 0; i < nStreams; ++i) {
@@ -107,7 +91,7 @@ void setupGPU(body_t *bodies, int N) {
 
 void gpu_update_naive(int N, body_t *bodies) {
   // Launch naive kernel
-  naive_kernel<<<numPairBlocks, BLOCK_SIZE>>>(d_positions, d_velocities, N);
+  naive_kernel<<<numPairBlocks, BLOCK_SIZE>>>(d_bodies, N);
   cudaDeviceSynchronize();
   cudaCheckErrors("STEP Kernel execution failed");
 
@@ -118,18 +102,13 @@ void gpu_update_naive(int N, body_t *bodies) {
 
     if (currentChunkSize > 0) {
       // Launch update kernel on the current stream
-      update_kernel<<<numBlocks, BLOCK_SIZE, 1, streams[i]>>>(
-          d_positions + offset, d_velocities + offset, currentChunkSize);
+      update_kernel<<<numBlocks, BLOCK_SIZE, 0, streams[i]>>>(
+          d_bodies + offset, currentChunkSize);
       cudaCheckErrors("UPDATE Kernel execution failed");
 
-      cudaMemcpyAsync(pinned_positions, d_positions + offset,
-                      currentChunkSize * sizeof(float4), cudaMemcpyDeviceToHost,
-                      streams[i]);
-
-      cudaStreamSynchronize(streams[i]); // Wait for the copy to complete
-      for (int j = 0; j < currentChunkSize; ++j) {
-        bodies[offset + j].position = pinned_positions[j];
-      }
+      cudaMemcpyAsync(&(bodies[offset]), d_bodies + offset,
+                      currentChunkSize * sizeof(body_t),
+                      cudaMemcpyDeviceToHost, streams[i]);
     }
   }
 
@@ -138,9 +117,9 @@ void gpu_update_naive(int N, body_t *bodies) {
     cudaStreamSynchronize(streams[i]);
   }
 }
+
 void cleanupGPU(body_t *bodies) {
-  cudaFree(d_positions);
-  cudaFree(d_velocities);
+  cudaFree(d_bodies);
   cudaFreeHost(bodies);
 
   // Destroy streams
