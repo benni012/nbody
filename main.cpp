@@ -8,7 +8,7 @@
 #define G 6.67408e-11
 
 #ifdef CUDA_FOUND
-#include "body.h"
+#include "structures.h"
 #include "nbody_cuda.cuh"
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -20,12 +20,12 @@ typedef struct float4 {
 typedef struct float3 {
   float x, y, z;
 } float3;
-#include "body.h"
+#include "structures.h"
 #endif
 
+#include "octree.h"
 #include "graphics.h"
 #include "nbody_cpu.h"
-#include "octree.h"
 octree_t octree;
 
 int main(int argc, char **argv) {
@@ -92,10 +92,8 @@ int main(int argc, char **argv) {
   initGraphics(N, bodies);
   { populate(bodies, N); }
 #ifdef CUDA_FOUND
-  if (use_gpu) {
-    pinMem(N, bodies);
-    setupGPU(bodies, N);
-  }
+  gpu_pin_mem(N, bodies);
+  gpu_setup(N, bodies);
 #endif
 
   //    // start ffmpeg telling it to expect raw rgba 720p-60hz frames
@@ -130,20 +128,29 @@ int main(int argc, char **argv) {
         max.y = fmaxf(max.y, bodies[i].position.y);
         max.z = fmaxf(max.z, bodies[i].position.z);
       }
-      float3 center = {(min.x + max.x) / 2, (min.y + max.y) / 2,
+      float3 center = {(min.x + max.x) / 2, 
+                       (min.y + max.y) / 2,
                        (min.z + max.z) / 2};
       // create octree
       octree_init(&octree, center,
-                  fmaxf(max.x - min.x, fmaxf(max.y - min.y, max.z - min.z)));
+                  fmaxf(max.x - min.x, fmaxf(max.y - min.y, max.z - min.z)), N);
       octree_build(&octree, bodies, N);
-      fprintf(stderr, "Time for init: %f\n", glfwGetTime() - current_time);
+      // fprintf(stderr, "Time for init: %f\n", glfwGetTime() - current_time);
       current_time = glfwGetTime();
 
       octree_calculate_proxies(&octree, ROOT);
-      fprintf(stderr, "Time for proxies: %f\n", glfwGetTime() - current_time);
+      // fprintf(stderr, "Time for proxies: %f\n", glfwGetTime() - current_time);
       current_time = glfwGetTime();
+
+#ifdef CUDA_FOUND
+      if (use_gpu) {
+        gpu_update_bh(N, bodies, &octree);
+      }
+#endif
+      if (!use_gpu && use_bh) {
       cpu_update_bh(N, bodies, &octree);
-      fprintf(stderr, "Time for update: %f\n", glfwGetTime() - current_time);
+      }
+      // fprintf(stderr, "Time for update: %f\n", glfwGetTime() - current_time);
     } else {
 #ifdef CUDA_FOUND
       if (use_gpu) {
@@ -164,7 +171,7 @@ int main(int argc, char **argv) {
   cleanup(bodies);
 #ifdef CUDA_FOUND
   if (use_gpu) {
-    cleanupGPU(bodies);
+    gpu_cleanup_naive(bodies);
   }
 #endif
   return 0;

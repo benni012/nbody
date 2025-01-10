@@ -1,7 +1,7 @@
 #ifndef NBODY_NBODY_CUDA_H
 #define NBODY_NBODY_CUDA_H
 
-#include "body.h"
+#include "structures.h"
 #include <stdio.h>
 
 // CUDA error-checking macro
@@ -16,13 +16,19 @@
   } while (0)
 
 // Kernel declarations
-__global__ void naive_kernel(float4 *positions, float3 *velocities, int pointCount);
-__global__ void update_kernel(float4 *positions, float3 *velocities, int pointCount);
+__global__ void naive_kernel(int pointCount, body_t *bodies);
+__global__ void bh_kernel(int pointCount, body_t *bodies, octree_t *octree, node_t *nodes, float theta_sq);
+__global__ void update_pos_kernel(int pointCount, body_t *bodies);
 
 // Function declarations
-void pinMem(int N, body_t *bodies);
-void setupGPU(body_t *bodies, int N);
-void cleanupGPU(body_t *bodies);
-void gpu_update_naive(int N, body_t *bodies);
+void gpu_pin_mem(int N, body_t *bodies);
+void gpu_setup(int N, body_t *bodies);
+void gpu_update_postion(int N, body_t *bodies);
 
+void gpu_update_naive(int N, body_t *bodies);
+void gpu_cleanup_naive(body_t *bodies);
+
+void gpu_setup_bh(body_t *bodies, octree_t *octree);
+void gpu_update_bh(int N, body_t *bodies, octree_t *octree);
+void gpu_cleanup_bh(body_t *bodies);
 #endif // NBODY_NBODY_CUDA_H

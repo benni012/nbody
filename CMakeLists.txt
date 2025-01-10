@@ -21,7 +21,7 @@ add_executable(nbody
     nbody_cuda.cuh
     nbody_cuda.cu
     graphics.h
-    body.h
+    structures.h
     nbody_cpu.h
     main.cpp
 )

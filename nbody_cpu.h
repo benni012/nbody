@@ -7,51 +7,109 @@
 #include "graphics.h"
 void cpu_update_naive(int N, body_t *bodies) {
 #pragma omp parallel for
-    for (int i = 0; i < N; i++) {
-        for (int j = i + 1; j < N; j++) {
-            float dx = bodies[j].position.x - bodies[i].position.x;
-            float dy = bodies[j].position.y - bodies[i].position.y;
-            float dz = bodies[j].position.z - bodies[i].position.z;
+  for (int i = 0; i < N; i++) {
+    for (int j = i + 1; j < N; j++) {
+      float dx = bodies[j].position.x - bodies[i].position.x;
+      float dy = bodies[j].position.y - bodies[i].position.y;
+      float dz = bodies[j].position.z - bodies[i].position.z;
 
-            float distSq = dx * dx + dy * dy + dz * dz;
-            if (distSq < 1e-4f) distSq = 1e-4f;
+      float distSq = dx * dx + dy * dy + dz * dz;
+      if (distSq < 1e-4f)
+        distSq = 1e-4f;
 
-            float invDist = 1.0f / sqrtf(distSq);
-            float invDist3 = invDist * invDist * invDist;
+      float invDist = 1.0f / sqrtf(distSq);
+      float invDist3 = invDist * invDist * invDist;
 
-            float force = G * bodies[i].position.w * bodies[j].position.w * invDist3;
+      float force = G * bodies[i].position.w * bodies[j].position.w * invDist3;
 
-            bodies[i].velocity.x += dx * force / bodies[i].position.w;
-            bodies[i].velocity.y += dy * force / bodies[i].position.w;
-            bodies[i].velocity.z += dz * force / bodies[i].position.w;
+      bodies[i].velocity.x += dx * force / bodies[i].position.w;
+      bodies[i].velocity.y += dy * force / bodies[i].position.w;
+      bodies[i].velocity.z += dz * force / bodies[i].position.w;
 
-            bodies[j].velocity.x -= dx * force / bodies[j].position.w;
-            bodies[j].velocity.y -= dy * force / bodies[j].position.w;
-            bodies[j].velocity.z -= dz * force / bodies[j].position.w;
-        }
+      bodies[j].velocity.x -= dx * force / bodies[j].position.w;
+      bodies[j].velocity.y -= dy * force / bodies[j].position.w;
+      bodies[j].velocity.z -= dz * force / bodies[j].position.w;
     }
+  }
 
-    for (int i = 0; i < N; i++) {
-        bodies[i].position.x += bodies[i].velocity.x;
-        bodies[i].position.y += bodies[i].velocity.y;
-        bodies[i].position.z += bodies[i].velocity.z;
-    }
+  for (int i = 0; i < N; i++) {
+    bodies[i].position.x += bodies[i].velocity.x;
+    bodies[i].position.y += bodies[i].velocity.y;
+    bodies[i].position.z += bodies[i].velocity.z;
+  }
 }
+
+float3 octree_calculate_acceleration(octree_t *octree, float4 position,
+                                     body_t *bodies, float theta) {
+  float theta_sq = theta * theta;
+  int node = ROOT;
+  float3 acceleration = {0, 0, 0};
+  while (true) {
+    node_t n = octree->nodes[node];
+    float dx = n.center_of_mass.x - position.x;
+    float dy = n.center_of_mass.y - position.y;
+    float dz = n.center_of_mass.z - position.z;
+    float d_sq = dx * dx + dy * dy + dz * dz;
+
+    if (n.box.half_extent * n.box.half_extent < theta_sq * d_sq) { // approximation criterion
+      if (d_sq < 1e-4f)
+        d_sq = 1e-4f;
+
+      float dc = sqrtf(d_sq) * d_sq;
+      float acc = G * n.center_of_mass.w / dc;
+
+      acceleration.x += dx * acc;
+      acceleration.y += dy * acc;
+      acceleration.z += dz * acc;
+
+      if (n.next == ROOT) {
+        break;
+      }
+      node = n.next;
+    } else if (n.children == ROOT) { // leaf
+      for (int i = n.pos_idx; i < n.pos_idx + n.count; i++) {
+        float4 other = bodies[i].position;
+        float dx = other.x - position.x;
+        float dy = other.y - position.y;
+        float dz = other.z - position.z;
+        float d_sq = dx * dx + dy * dy + dz * dz;
+        if (d_sq < 1e-4f)
+          d_sq = 1e-4f;
+
+        float dc = sqrtf(d_sq) * d_sq;
+        float acc = G * other.w / dc;
+
+        acceleration.x += dx * acc;
+        acceleration.y += dy * acc;
+        acceleration.z += dz * acc;
+      }
+      if (n.next == ROOT) {
+        break;
+      }
+      node = n.next;
+    } else {
+      node = n.children;
+    }
+  }
+  return acceleration;
+}
+
 void cpu_update_bh(int N, body_t *bodies, octree_t *octree) {
-    // Calculate accelerations
+  // Calculate accelerations
 #pragma omp parallel for
-    for (int i = 0; i < N; i++) {
-        float3 acceleration = octree_calculate_acceleration(octree, bodies[i].position, bodies, 0.8);
-        bodies[i].velocity.x += acceleration.x;
-        bodies[i].velocity.y += acceleration.y;
-        bodies[i].velocity.z += acceleration.z;
-    }
+  for (int i = 0; i < N; i++) {
+    float3 acceleration =
+        octree_calculate_acceleration(octree, bodies[i].position, bodies, 0.8);
+    bodies[i].velocity.x += acceleration.x;
+    bodies[i].velocity.y += acceleration.y;
+    bodies[i].velocity.z += acceleration.z;
+  }
 
-    // Update positions
-    for (int i = 0; i < N; i++) {
-        bodies[i].position.x += bodies[i].velocity.x;
-        bodies[i].position.y += bodies[i].velocity.y;
-        bodies[i].position.z += bodies[i].velocity.z;
-    }
+  // Update positions
+  for (int i = 0; i < N; i++) {
+    bodies[i].position.x += bodies[i].velocity.x;
+    bodies[i].position.y += bodies[i].velocity.y;
+    bodies[i].position.z += bodies[i].velocity.z;
+  }
 }
-#endif //NBODY_NBODY_CPU_H
+#endif // NBODY_NBODY_CPU_H
