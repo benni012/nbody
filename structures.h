@@ -6,8 +6,6 @@
 #include <cuda_runtime.h>
 #endif 
 
-#define ROOT 0
-#define LEAF_CAPACITY 16
 
 struct alignas(16) body_t {
     float4 position;

@@ -17,7 +17,7 @@
 
 // Kernel declarations
 __global__ void naive_kernel(int pointCount, body_t *bodies);
-__global__ void bh_kernel(int pointCount, body_t *bodies, octree_t *octree, node_t *nodes, float theta_sq);
+__global__ void bh_kernel(int pointCount, body_t *bodies, octree_t *octree);
 __global__ void update_pos_kernel(int pointCount, body_t *bodies);
 
 // Function declarations

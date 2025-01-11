@@ -1,12 +1,13 @@
 #ifndef NBODY_OCTREE_H
 #define NBODY_OCTREE_H
 
-#define ROOT 0
-#define LEAF_CAPACITY 16
 #include <vector>
 #include <functional>
 #include <algorithm>
 #include "structures.h"
+
+#define ROOT 0
+#define LEAF_CAPACITY 16
 
 void octree_init(octree_t *octree, float3 center, float half_extent, int max_nodes) {
     octree->nodes = new node_t[max_nodes];  // Allocate memory for the nodes
