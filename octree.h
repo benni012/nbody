@@ -6,8 +6,6 @@
 #include <algorithm>
 #include "structures.h"
 
-#define ROOT 0
-#define LEAF_CAPACITY 16
 
 void octree_init(octree_t *octree, float3 center, float half_extent, int max_nodes) {
     octree->nodes = new node_t[max_nodes];  // Allocate memory for the nodes
@@ -144,6 +142,15 @@ void octree_build(octree_t *octree, body_t *bodies, int N) {
         }
         node++;
     }
+}
+
+void octree_free(octree_t *octree) {
+    if (octree->nodes != nullptr) {
+        delete[] octree->nodes;  // Deallocate the memory for nodes
+        octree->nodes = nullptr; // Set pointer to nullptr to avoid dangling references
+    }
+    octree->num_nodes = 0;        // Reset node count
+    octree->max_nodes = 0;        // Reset max nodes
 }
 
 #endif //NBODY_OCTREE_H
