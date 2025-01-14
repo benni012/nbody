@@ -4,8 +4,18 @@
 #ifdef CUDA_FOUND
 #include <cuda.h>
 #include <cuda_runtime.h>
+#else
+typedef struct float4 {
+  float x, y, z, w;
+} float4;
+typedef struct float3 {
+  float x, y, z;
+} float3;
+
 #endif 
 
+#define ROOT 0
+#define LEAF_CAPACITY 16
 
 struct alignas(16) body_t {
     float4 position;
@@ -26,9 +36,9 @@ typedef struct node {
 } node_t;
 
 typedef struct octree {
-    node_t* nodes;  // Flat array of nodes
+    node_t* nodes;
     int num_nodes;
-    int max_nodes;  // Maximum number of nodes in the flat array
+    int max_nodes;
 } octree_t;
 
 #endif // NBODY_STRUCTURES_H

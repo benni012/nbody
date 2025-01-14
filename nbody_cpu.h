@@ -5,6 +5,7 @@
 #ifndef NBODY_NBODY_CPU_H
 #define NBODY_NBODY_CPU_H
 #include "graphics.h"
+
 void cpu_update_naive(int N, body_t *bodies) {
 #pragma omp parallel for
   for (int i = 0; i < N; i++) {
@@ -14,8 +15,6 @@ void cpu_update_naive(int N, body_t *bodies) {
       float dz = bodies[j].position.z - bodies[i].position.z;
 
       float distSq = dx * dx + dy * dy + dz * dz;
-      if (distSq < 1e-4f)
-        distSq = 1e-4f;
 
       float invDist = 1.0f / sqrtf(distSq);
       float invDist3 = invDist * invDist * invDist;
@@ -49,11 +48,9 @@ float3 octree_calculate_acceleration(octree_t *octree, float4 position,
     float dx = n.center_of_mass.x - position.x;
     float dy = n.center_of_mass.y - position.y;
     float dz = n.center_of_mass.z - position.z;
-    float d_sq = dx * dx + dy * dy + dz * dz;
+    float d_sq = dx * dx + dy * dy + dz * dz + EPS_SQ;
 
-    if (n.box.half_extent * n.box.half_extent < theta_sq * d_sq) { // approximation criterion
-      if (d_sq < 1e-4f)
-        d_sq = 1e-4f;
+    if (4*n.box.half_extent * n.box.half_extent < theta_sq * d_sq) { // approximation criterion
 
       float dc = sqrtf(d_sq) * d_sq;
       float acc = G * n.center_of_mass.w / dc;
@@ -72,9 +69,7 @@ float3 octree_calculate_acceleration(octree_t *octree, float4 position,
         float dx = other.x - position.x;
         float dy = other.y - position.y;
         float dz = other.z - position.z;
-        float d_sq = dx * dx + dy * dy + dz * dz;
-        if (d_sq < 1e-4f)
-          d_sq = 1e-4f;
+        float d_sq = dx * dx + dy * dy + dz * dz + EPS_SQ;
 
         float dc = sqrtf(d_sq) * d_sq;
         float acc = G * other.w / dc;

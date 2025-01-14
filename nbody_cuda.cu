@@ -1,15 +1,18 @@
-#include "structures.h"
 #include "nbody_cuda.cuh"
+#include "structures.h"
+#include "timer.h"
+#include <cmath>
 #include <cstddef>
 #include <iterator>
-#include "timer.h"
 
-#define BLOCK_SIZE 256
+#define BLOCK_SIZE 128
+#define MAX_STACK_DEPTH 64
 #define nStreams 64
 
 // constant memory
 __constant__ float G = 6.67408e-11;
 __constant__ float theta_sq = 0.8f * 0.8f;
+__constant__ float eps_sq = 0.05f * 0.05f;
 
 int numBlocks;
 int totalPairs;
@@ -25,7 +28,6 @@ octree_t *d_octree;
 bool bh_setup = false;
 
 cudaStream_t streams[nStreams];
-size_t sharedMemSize = BLOCK_SIZE * sizeof(float4); // Shared memory for positions
 
 __global__ void naive_kernel(int pointCount, body_t *bodies) {
   int particle_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -55,7 +57,7 @@ __global__ void naive_kernel(int pointCount, body_t *bodies) {
       float dz = other.z - particle.z;
 
       float distSq =
-          fmaxf(dx * dx + dy * dy + dz * dz, 1e-4f); // Avoid small distances
+          dx * dx + dy * dy + dz * dz + eps_sq; // Avoid small distances
       float invDist = rsqrtf(distSq);
       float invDist3 = invDist * invDist * invDist;
       float force = G * particle.w * other.w * invDist3;
@@ -67,62 +69,65 @@ __global__ void naive_kernel(int pointCount, body_t *bodies) {
     __syncthreads();
   }
 }
-__global__ void bh_kernel(int N, body_t *bodies, octree_t *octree) {
+
+__global__ void bh_kernel(body_t *bodies, octree_t *octree) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  int stride = blockDim.x * gridDim.x;
 
-  for (int i = tid; i < N; i += stride) {
-    int node = ROOT;
-    float3 acceleration = {0, 0, 0};
-    float4 position = bodies[i].position;
+  __syncthreads();
 
-    while (true) {
-      node_t n = octree->nodes[node];
-      float dx = n.center_of_mass.x - position.x;
-      float dy = n.center_of_mass.y - position.y;
-      float dz = n.center_of_mass.z - position.z;
-      float d_sq = fmaxf(dx * dx + dy * dy + dz * dz, 1e-4);
+  int node = ROOT;
+  float3 acceleration = {0, 0, 0};
+  float4 position = bodies[tid].position;
 
-      if (n.box.half_extent * n.box.half_extent < theta_sq * d_sq) {
+  while (true) {
+    node_t n = octree->nodes[node];
+    float dx = n.center_of_mass.x - position.x;
+    float dy = n.center_of_mass.y - position.y;
+    float dz = n.center_of_mass.z - position.z;
+    float d_sq = dx * dx + dy * dy + dz * dz + eps_sq;
+
+    if (4*n.box.half_extent * n.box.half_extent < theta_sq * d_sq) {
+      float inv_d = rsqrtf(d_sq);
+      float acc = G * n.center_of_mass.w * inv_d * inv_d * inv_d;
+
+      acceleration.x += dx * acc;
+      acceleration.y += dy * acc;
+      acceleration.z += dz * acc;
+
+      if (n.next == ROOT) {
+        break;
+      }
+      node = n.next;
+      __syncthreads();
+    } else if (n.children == ROOT) {
+      for (int j = n.pos_idx; j < n.pos_idx + n.count; j++) {
+        float4 other = bodies[j].position;
+        float dx = other.x - position.x;
+        float dy = other.y - position.y;
+        float dz = other.z - position.z;
+        float d_sq = dx * dx + dy * dy + dz * dz + eps_sq;
+
         float inv_d = rsqrtf(d_sq);
-        float acc = G * n.center_of_mass.w * inv_d * inv_d * inv_d;
+        float acc = G * other.w * inv_d * inv_d * inv_d;
 
         acceleration.x += dx * acc;
         acceleration.y += dy * acc;
         acceleration.z += dz * acc;
-
-        if (n.next == ROOT) {
-          break;
-        }
-        node = n.next;
-      } else if (n.children == ROOT) {
-        for (int j = n.pos_idx; j < n.pos_idx + n.count; j++) {
-          float4 other = bodies[j].position;
-          float dx = other.x - position.x;
-          float dy = other.y - position.y;
-          float dz = other.z - position.z;
-          float d_sq = fmaxf(dx * dx + dy * dy + dz * dz, 1e-4f);
-
-          float inv_d = rsqrtf(d_sq);
-          float acc = G * other.w * inv_d * inv_d * inv_d;
-
-          acceleration.x += dx * acc;
-          acceleration.y += dy * acc;
-          acceleration.z += dz * acc;
-        }
-        if (n.next == ROOT) {
-          break;
-        }
-        node = n.next;
-      } else {
-        node = n.children;
       }
+      if (n.next == ROOT) {
+        break;
+      }
+      node = n.next;
+      __syncthreads();
+    } else {
+      node = n.children;
+      __syncthreads();
     }
-
-    atomicAdd(&bodies[i].velocity.x, acceleration.x);
-    atomicAdd(&bodies[i].velocity.y, acceleration.y);
-    atomicAdd(&bodies[i].velocity.z, acceleration.z);
   }
+
+  atomicAdd(&bodies[tid].velocity.x, acceleration.x);
+  atomicAdd(&bodies[tid].velocity.y, acceleration.y);
+  atomicAdd(&bodies[tid].velocity.z, acceleration.z);
 }
 
 __global__ void update_pos_kernel(int pointCount, body_t *bodies) {
@@ -135,7 +140,7 @@ __global__ void update_pos_kernel(int pointCount, body_t *bodies) {
   __syncthreads();
 }
 
-void gpu_update_position(int N, body_t *bodies){
+void gpu_update_position(int N, body_t *bodies) {
   for (int i = 0; i < nStreams; ++i) {
     int offset = i * updateChunks;
     int currentChunkSize = std::min(updateChunks, N - offset);
@@ -196,42 +201,34 @@ void gpu_cleanup_naive(body_t *bodies) {
   }
 }
 
-void gpu_setup_bh(body_t *bodies, octree_t *octree){
+void gpu_setup_bh(body_t *bodies, octree_t *octree, int N) {
   cudaMalloc(&d_octree, sizeof(octree_t));
-  cudaMalloc(&d_nodes, octree->max_nodes* sizeof(node_t));
-  
+  cudaMalloc(&d_nodes, octree->max_nodes * sizeof(node_t));
+
   octree_t h_octree = *octree;
   h_octree.nodes = d_nodes; // Update to device pointer
-  cudaMemcpy(d_octree, 
-             &h_octree, 
-             sizeof(octree_t),
-             cudaMemcpyHostToDevice);
+  cudaMemcpy(d_octree, &h_octree, sizeof(octree_t), cudaMemcpyHostToDevice);
 }
 
-
 void gpu_update_bh(int N, body_t *bodies, octree_t *octree) {
-  if (!bh_setup){
-    gpu_setup_bh(bodies, octree);
+  if (!bh_setup) {
+    gpu_setup_bh(bodies, octree, N);
     bh_setup = true;
   }
-  
+
   // Timer tim = Timer(true);
-  cudaMemcpy(d_nodes, octree->nodes, octree->max_nodes* sizeof(node_t),
-             cudaMemcpyHostToDevice);
-  // printf("H2D %f\n", tim.elapsed());
   // tim.start();
-  
-  bh_kernel<<<numBlocks, BLOCK_SIZE>>>(N, d_bodies, d_octree);
+  cudaMemcpy(d_nodes, octree->nodes, octree->max_nodes * sizeof(node_t),
+             cudaMemcpyHostToDevice);
+  // printf("H2D %f\n\n", tim.elapsed());
+
+  bh_kernel<<<numBlocks, BLOCK_SIZE>>>(d_bodies, d_octree);
   cudaDeviceSynchronize();
   cudaCheckErrors("STEP Kernel execution failed");
-  // printf("KER %f\n", tim.elapsed());
+  // printf("Update Kernel %f\n", tim.elapsed());
   // tim.start();
 
-  update_pos_kernel<<<numBlocks, BLOCK_SIZE>>>(N, d_bodies);
-  // printf("KEU %f\n", tim.elapsed());
-  // tim.start();
-  cudaMemcpy(bodies, d_bodies, N * sizeof(body_t), cudaMemcpyDeviceToHost);
-  // gpu_update_poH2DH2Dsition(N, bodies);
+  gpu_update_position(N, bodies);
   // printf("D2H %f\n\n", tim.stop());
 }
 

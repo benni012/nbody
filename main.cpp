@@ -6,21 +6,14 @@
 #include <getopt.h>
 
 #define G 6.67408e-11
+#define EPS_SQ (0.05 * 0.05)
+
+#include "structures.h"
 
 #ifdef CUDA_FOUND
-#include "structures.h"
 #include "nbody_cuda.cuh"
 #include <cuda.h>
 #include <cuda_runtime.h>
-
-#else
-typedef struct float4 {
-  float x, y, z, w;
-} float4;
-typedef struct float3 {
-  float x, y, z;
-} float3;
-#include "structures.h"
 #endif
 
 #include "octree.h"
@@ -116,6 +109,7 @@ int main(int argc, char **argv) {
     //        glfwPollEvents();
 
     if (use_bh) {
+      octree_free(&octree);
       double current_time = start_time;
       // find min/max of positions
       float3 min = {INFINITY, INFINITY, INFINITY};
