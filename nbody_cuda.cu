@@ -376,16 +376,11 @@ void gpu_setup_bh(body_t *bodies, octree_t *octree, int N) {
 }
 
 void gpu_update_bh(int N, body_t *bodies, octree_t *octree) {
-  if(!bh_setup){
-    gpu_setup(N, bodies);
-    bh_setup = true;
-  }
-  
   tim.start();
-  cudaMemcpy(d_nodes, octree->nodes, octree->max_nodes * sizeof(node_t),
-             cudaMemcpyHostToDevice);
-  cudaCheckErrors("H2D execution failed");
-  printf("H2D %f\n\n", tim.elapsed());
+  // cudaMemcpy(d_nodes, octree->nodes, octree->max_nodes * sizeof(node_t),
+  //            cudaMemcpyHostToDevice);
+  // cudaCheckErrors("H2D execution failed");
+  // printf("H2D %f\n\n", tim.elapsed());
 
   bh_kernel<<<numBlocks, BLOCK_SIZE>>>(d_bodies, d_octree);
   cudaDeviceSynchronize();
@@ -413,11 +408,13 @@ void gpu_cleanup_bh() {
 void gpu_build_octree(float3 center, float half_extent, int N){
   tim.start();
   octree_init_kernel<<<1,1>>>(d_octree, center, half_extent, N);
+  cudaDeviceSynchronize();
   cudaCheckErrors("INIT Kernel execution failed");
   printf("INIT Kernel %f\n", tim.elapsed());
   tim.start();
 
   build_octree_kernel<<<1,1>>>(d_octree, d_bodies, N);
+  cudaDeviceSynchronize();
   cudaCheckErrors("BUILD Kernel execution failed");
   printf("BUILD Kernel %f\n", tim.elapsed());
   tim.start();

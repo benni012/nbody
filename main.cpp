@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
   gpu_pin_mem(N, bodies);
   gpu_setup(N, bodies);
   if (use_bh){
-    // gpu_setup_bh(bodies, &octree, N);
+    gpu_setup_bh(bodies, &octree, N);
   }
 #endif
 
@@ -129,17 +129,17 @@ int main(int argc, char **argv) {
                        (min.y + max.y) / 2,
                        (min.z + max.z) / 2};
       // create octree
-      octree_init(&octree, center,
-                  fmaxf(max.x - min.x, fmaxf(max.y - min.y, max.z - min.z)), N);
-      octree_build(&octree, bodies, N);
-      fprintf(stderr, "Time for init: %f\n", glfwGetTime() - current_time);
-      current_time = glfwGetTime();
+      // octree_init(&octree, center,
+      //             fmaxf(max.x - min.x, fmaxf(max.y - min.y, max.z - min.z)), N);
+      // octree_build(&octree, bodies, N);
+      // fprintf(stderr, "Time for init: %f\n", glfwGetTime() - current_time);
+      // current_time = glfwGetTime();
 
-      octree_calculate_proxies(&octree, ROOT);
-      fprintf(stderr, "Time for proxies: %f\n", glfwGetTime() - current_time);
-      current_time = glfwGetTime();
+      // octree_calculate_proxies(&octree, ROOT);
+      // fprintf(stderr, "Time for proxies: %f\n", glfwGetTime() - current_time);
+      // current_time = glfwGetTime();
 
-      // gpu_build_octree(center, fmaxf(max.x - min.x, fmaxf(max.y - min.y, max.z - min.z)), N);
+      gpu_build_octree(center, fmaxf(max.x - min.x, fmaxf(max.y - min.y, max.z - min.z)), N);
 
 #ifdef CUDA_FOUND
       if (use_gpu) {
