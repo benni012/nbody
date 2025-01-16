@@ -98,107 +98,135 @@ __global__ void octree_init_kernel(octree_t *octree, float3 center, float half_e
 }
 
 __global__ void build_octree_kernel(octree_t *octree, body_t *bodies, int N) {
-    octree->nodes[ROOT].pos_idx = 0;
-    octree->nodes[ROOT].count = N;
+    const int thread_id = threadIdx.x + blockIdx.x * blockDim.x;
+    const int warp_id = thread_id / warpSize;
+    const int lane_id = thread_id % warpSize;
 
-    int node = 0;
-    while (node < octree->num_nodes) {
-        if (octree->nodes[node].count > LEAF_CAPACITY) {
-            octree_split_kernel<<<1,1>>>(octree, node, bodies);
-        } else {
-            for (int i = octree->nodes[node].pos_idx; i < octree->nodes[node].pos_idx + octree->nodes[node].count; i++) {
-                body_t body = bodies[i];
-                octree->nodes[node].center_of_mass.x += body.position.x * body.position.w;
-                octree->nodes[node].center_of_mass.y += body.position.y * body.position.w;
-                octree->nodes[node].center_of_mass.z += body.position.z * body.position.w;
-                octree->nodes[node].center_of_mass.w += body.position.w;
-            }
-            if (octree->nodes[node].center_of_mass.w != 0) {
-                octree->nodes[node].center_of_mass.x /= octree->nodes[node].center_of_mass.w;
-                octree->nodes[node].center_of_mass.y /= octree->nodes[node].center_of_mass.w;
-                octree->nodes[node].center_of_mass.z /= octree->nodes[node].center_of_mass.w;
+    // Initialize the root node (single thread for initialization)
+    if (thread_id == 0) {
+        octree->nodes[ROOT].pos_idx = 0;
+        octree->nodes[ROOT].count = N;
+    }
+    __syncthreads();
+
+    for (int node = 0; node < octree->num_nodes; node += blockDim.x * gridDim.x) {
+        int current_node = node + thread_id;
+
+        if (current_node < octree->num_nodes) {
+            // Check if splitting is needed
+            if (octree->nodes[current_node].count > LEAF_CAPACITY) {
+                // Perform splitting
+                octree_split_kernel<<<1, 1>>>(octree, current_node, bodies);
+            } else {
+                // Compute center of mass using warp-level reduction
+                float4 com = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+                int start = octree->nodes[current_node].pos_idx;
+                int count = octree->nodes[current_node].count;
+
+                for (int i = lane_id; i < count; i += warpSize) {
+                    body_t body = bodies[start + i];
+                    com.x = body.position.x * body.position.w;
+                    com.y = body.position.y * body.position.w;
+                    com.z = body.position.z * body.position.w;
+                    com.w = body.position.w;
+                }
+
+                // Finalize the center of mass calculation
+                if (lane_id == 0 && com.w > 0) {
+                    com.x /= com.w;
+                    com.y /= com.w;
+                    com.z /= com.w;
+                }
+
+                // Assign center of mass to the node
+                if (lane_id == 0) {
+                    octree->nodes[current_node].center_of_mass = com;
+                }
             }
         }
-        node++;
-        __syncthreads();
     }
 }
 
-struct CompareZ {
-    float z;
-    __device__ CompareZ(float z_) : z(z_) {}
-    __device__ bool operator()(const body_t& a) const {
-        return a.position.z < z;
+struct CompareXYZ {
+    float3 center;
+    int octant;
+
+    __device__ CompareXYZ(float3 center_, int octant_)
+        : center(center_), octant(octant_) {}
+
+    __device__ bool operator()(const body_t &body) const {
+        bool x_cmp = (octant & 1) ? (body.position.x >= center.x)
+                                  : (body.position.x < center.x);
+        bool y_cmp = (octant & 2) ? (body.position.y >= center.y)
+                                  : (body.position.y < center.y);
+        bool z_cmp = (octant & 4) ? (body.position.z >= center.z)
+                                  : (body.position.z < center.z);
+
+        return x_cmp && y_cmp && z_cmp;
     }
 };
 
-struct CompareY {
-    float y;
-    __device__ CompareY(float y_) : y(y_) {}
-    __device__ bool operator()(const body_t& a) const {
-        return a.position.y < y;
-    }
-};
 
-struct CompareX {
-    float x;
-    __device__ CompareX(float x_) : x(x_) {}
-    __device__ bool operator()(const body_t& a) const {
-        return a.position.x < x;
-    }
-};
+__global__ void octree_split_kernel(octree_t *octree, int node, body_t *bodies) {
+    // Each thread handles one octant
+    int thread_id = threadIdx.x;
 
-__global__ void octree_split_kernel(octree_t *octree, int node,
-                                    body_t *bodies) {
-  
+    // Parent node data
     node_t parent = octree->nodes[node];
     float3 center = parent.box.center;
-    
-    int split[] = {parent.pos_idx, 0, 0, 0, 0, 0, 0, 0, parent.pos_idx + parent.count};
-    
-    split[4] = thrust::partition(thrust::device, bodies + split[0], bodies + split[8], CompareZ(center.z)) - bodies;
-    split[2] = thrust::partition(thrust::device, bodies + split[0], bodies + split[4], CompareY(center.y)) - bodies;
-    split[6] = thrust::partition(thrust::device, bodies + split[4], bodies + split[8], CompareY(center.y)) - bodies;
-    split[1] = thrust::partition(thrust::device, bodies + split[0], bodies + split[2], CompareX(center.x)) - bodies;
-    split[3] = thrust::partition(thrust::device, bodies + split[2], bodies + split[4], CompareX(center.x)) - bodies;
-    split[5] = thrust::partition(thrust::device, bodies + split[4], bodies + split[6], CompareX(center.x)) - bodies;
-    split[7] = thrust::partition(thrust::device, bodies + split[6], bodies + split[8], CompareX(center.x)) - bodies;
+    float half_extent = parent.box.half_extent / 2.0f;
 
-
-    float half = parent.box.half_extent;
-    
-    int children = octree->num_nodes;
-    octree->nodes[node].children = children;
-
-    int nexts[8] = {children + 1,
-                    children + 2,
-                    children + 3,
-                    children + 4,
-                    children + 5,
-                    children + 6,
-                    children + 7,
-                    parent.next};
-
-    // Ensure that there is enough space in the flat array
-    if (octree->num_nodes + 8 > octree->max_nodes) {
-        // Handle overflow (this can be expanded or error handling could be added)
-        // For simplicity, we are just returning.
-        return;
+    __shared__ int split_indices[9];  // Shared memory for split boundaries
+    if (thread_id == 0) {
+        split_indices[0] = parent.pos_idx;  // Start index of parent
+        split_indices[8] = parent.pos_idx + parent.count;  // End index of parent
     }
+    __syncthreads();
 
-    for (int i = 0; i < 8; i++) {
-        float3 new_center = parent.box.center;
-        new_center.x += half / 2 * (i & 1 ? 1 : -1);
-        new_center.y += half / 2 * (i & 2 ? 1 : -1);
-        new_center.z += half / 2 * (i & 4 ? 1 : -1);
+    if (thread_id < 8) {
+        // Partition bodies into octants using CompareXYZ
+        split_indices[thread_id + 1] = thrust::partition(
+            thrust::device,
+            bodies + split_indices[thread_id],      // Start of range
+            bodies + split_indices[8],             // End of range
+            CompareXYZ(center, thread_id)) - bodies;
+    }
+    __syncthreads();
 
-        octree->nodes[octree->num_nodes++] = {ROOT,
-                                              {new_center, half / 2},
-                                              {0, 0, 0, 0},
-                                              split[i], split[i + 1] - split[i],
-                                              nexts[i]};
+    // Single thread creates child nodes
+    if (thread_id == 0) {
+        int children = octree->num_nodes;
+        octree->nodes[node].children = children;
+
+        if (octree->num_nodes + 8 > octree->max_nodes) {
+            // Handle overflow (e.g., expand the octree or throw an error)
+            return;
+        }
+
+        for (int i = 0; i < 8; i++) {
+            // Calculate the new center for the child octant
+            float3 new_center = {
+                center.x + half_extent * ((i & 1) ? 1 : -1),
+                center.y + half_extent * ((i & 2) ? 1 : -1),
+                center.z + half_extent * ((i & 4) ? 1 : -1)
+            };
+
+            // Create child node
+            octree->nodes[children + i] = {
+                .children = ROOT,  // Leaf by default
+                .box = {new_center, half_extent},
+                .center_of_mass = {0, 0, 0, 0},
+                .pos_idx = split_indices[i],
+                .count = split_indices[i + 1] - split_indices[i],
+                .next = (i == 7) ? parent.next : children + i + 1
+            };
+        }
+
+        // Update octree node count
+        octree->num_nodes += 8;
     }
 }
+
 
 __global__ void octree_calculate_proxies_kernel(octree_t *octree, int node) {
     if (octree->nodes[node].children == ROOT) {
