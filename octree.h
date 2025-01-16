@@ -16,15 +16,6 @@ void octree_init(octree_t *octree, float3 center, float half_extent, int max_nod
     octree->nodes[ROOT] = {ROOT, {center, half_extent}, {0, 0, 0, 0}, 0, 0, 0};
 }
 
-int find_split(body_t *bodies, int start, int end, std::function<bool(body_t)> func) {
-    for (int i = start; i < end; i++) {
-        if (func(bodies[i])) {
-            return i;
-        }
-    }
-    return -1;
-}
-
 void octree_split(octree_t *octree, int node, body_t *bodies) {
     node_t parent = octree->nodes[node];
     float3 center = parent.box.center;

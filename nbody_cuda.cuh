@@ -15,6 +15,13 @@
     }                                                                          \
   } while (0)
 
+__global__ void octree_init_kernel(octree_t *octree, float3 center, float half_extent,
+                            int max_nodes);
+__global__ void build_octree_kernel(octree_t *octree, body_t *bodies, int N);
+__global__ void octree_split_kernel(octree_t *octree, int node, body_t *bodies);
+__global__ void octree_calculate_proxies_kernel(octree_t *octree, int node);
+
+void gpu_build_octree(float3 center, float half_extent, int N);
 // Kernel declarations
 __global__ void naive_kernel(int pointCount, body_t *bodies);
 __global__ void bh_kernel(body_t *bodies, octree_t *octree);
