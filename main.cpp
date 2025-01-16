@@ -129,11 +129,11 @@ int main(int argc, char **argv) {
       octree_init(&octree, center,
                   fmaxf(max.x - min.x, fmaxf(max.y - min.y, max.z - min.z)), N);
       octree_build(&octree, bodies, N);
-      // fprintf(stderr, "Time for init: %f\n", glfwGetTime() - current_time);
+      fprintf(stderr, "Time for init: %f\n", glfwGetTime() - current_time);
       current_time = glfwGetTime();
 
       octree_calculate_proxies(&octree, ROOT);
-      // fprintf(stderr, "Time for proxies: %f\n", glfwGetTime() - current_time);
+      fprintf(stderr, "Time for proxies: %f\n", glfwGetTime() - current_time);
       current_time = glfwGetTime();
 
 #ifdef CUDA_FOUND
@@ -144,7 +144,7 @@ int main(int argc, char **argv) {
       if (!use_gpu && use_bh) {
       cpu_update_bh(N, bodies, &octree);
       }
-      // fprintf(stderr, "Time for update: %f\n", glfwGetTime() - current_time);
+      fprintf(stderr, "Time for update: %f\n", glfwGetTime() - current_time);
     } else {
 #ifdef CUDA_FOUND
       if (use_gpu) {

@@ -216,20 +216,20 @@ void gpu_update_bh(int N, body_t *bodies, octree_t *octree) {
     bh_setup = true;
   }
 
-  // Timer tim = Timer(true);
-  // tim.start();
+  Timer tim = Timer(true);
+  tim.start();
   cudaMemcpy(d_nodes, octree->nodes, octree->max_nodes * sizeof(node_t),
              cudaMemcpyHostToDevice);
-  // printf("H2D %f\n\n", tim.elapsed());
+  printf("H2D %f\n\n", tim.elapsed());
 
   bh_kernel<<<numBlocks, BLOCK_SIZE>>>(d_bodies, d_octree);
   cudaDeviceSynchronize();
   cudaCheckErrors("STEP Kernel execution failed");
-  // printf("Update Kernel %f\n", tim.elapsed());
-  // tim.start();
+  printf("Update Kernel %f\n", tim.elapsed());
+  tim.start();
 
   gpu_update_position(N, bodies);
-  // printf("D2H %f\n\n", tim.stop());
+  printf("D2H %f\n\n", tim.stop());
 }
 
 void gpu_cleanup_bh() {
