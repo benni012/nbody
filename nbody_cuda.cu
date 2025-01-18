@@ -7,7 +7,6 @@
 #include <iterator>
 
 #define BLOCK_SIZE 256
-#define nStreams 12
 
 // constant memory
 // mimic main.cpp defaults
@@ -20,16 +19,11 @@ int numBlocks;
 int totalPairs;
 int numPairBlocks;
 
-int updateChunks;
-int updateBlocks;
-
 body_t *d_bodies;
 
 node_t *d_nodes;
 octree_t *d_octree;
 bool bh_setup = false;
-
-cudaStream_t streams[nStreams];
 
 __global__ void naive_kernel(int pointCount, body_t *bodies) {
   int particle_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -141,25 +135,14 @@ __global__ void update_pos_kernel(int pointCount, body_t *bodies) {
 }
 
 void gpu_update_position(int N, body_t *bodies) {
+  BENCHMARK_START("PosUpdate_GPU");
+  update_pos_kernel<<<numBlocks, BLOCK_SIZE>>>(N, d_bodies);
+  cudaDeviceSynchronize();
+  BENCHMARK_STOP("PosUpdate_GPU");
+  cudaCheckErrors("UPDATE Kernel execution failed");
+
   BENCHMARK_START("BodiesD2H");
-  for (int i = 0; i < nStreams; ++i) {
-    int offset = i * updateChunks;
-    int currentChunkSize = std::min(updateChunks, N - offset);
-
-    if (currentChunkSize > 0) {
-      update_pos_kernel<<<numBlocks, BLOCK_SIZE, 0, streams[i]>>>(
-          currentChunkSize, d_bodies + offset);
-      cudaCheckErrors("UPDATE Kernel execution failed");
-
-      cudaMemcpyAsync(&(bodies[offset]), d_bodies + offset,
-                      currentChunkSize * sizeof(body_t), cudaMemcpyDeviceToHost,
-                      streams[i]);
-    }
-  }
-
-  for (int i = 0; i < nStreams; ++i) {
-    cudaStreamSynchronize(streams[i]);
-  }
+  cudaMemcpy(bodies, d_bodies, N * sizeof(body_t), cudaMemcpyDeviceToHost);
   BENCHMARK_STOP("BodiesD2H");
 }
 
@@ -173,24 +156,16 @@ void gpu_setup(int N, body_t *bodies) {
   totalPairs = (N * (N - 1)) / 2;
   numPairBlocks = (totalPairs + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-  updateChunks = (N + nStreams - 1) / nStreams;
-  updateBlocks = (updateChunks + BLOCK_SIZE - 1) / BLOCK_SIZE;
-
   // allocate and cpy bodies to device
   cudaMalloc(&d_bodies, N * sizeof(body_t));
   cudaMemcpy(d_bodies, bodies, N * sizeof(body_t), cudaMemcpyHostToDevice);
-
-  // create copy device to host streams
-  for (int i = 0; i < nStreams; ++i) {
-    cudaStreamCreate(&streams[i]);
-  }
 }
 
 void gpu_update_naive(int N, body_t *bodies) {
-  BENCHMARK_START("UpdateNaive_GPU");
+  BENCHMARK_START("AccUpdateNaive_GPU");
   naive_kernel<<<numPairBlocks, BLOCK_SIZE>>>(N, d_bodies);
   cudaDeviceSynchronize();
-  BENCHMARK_STOP("UpdateNaive_GPU");
+  BENCHMARK_STOP("AccUpdateNaive_GPU");
   cudaCheckErrors("STEP Kernel execution failed");
   gpu_update_position(N, bodies);
 }
@@ -198,11 +173,6 @@ void gpu_update_naive(int N, body_t *bodies) {
 void gpu_cleanup_naive(body_t *bodies) {
   cudaFree(d_bodies);
   cudaFreeHost(bodies);
-
-  // destroy streams
-  for (int i = 0; i < nStreams; ++i) {
-    cudaStreamDestroy(streams[i]);
-  }
 }
 
 void gpu_setup_bh(body_t *bodies, octree_t *octree, int N) {
@@ -239,9 +209,4 @@ void gpu_cleanup_bh(body_t *bodies) {
   cudaFreeHost(bodies);
   cudaFree(d_octree);
   cudaFree(d_nodes);
-
-  // Destroy streams
-  for (int i = 0; i < nStreams; ++i) {
-    cudaStreamDestroy(streams[i]);
-  }
 }

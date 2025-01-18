@@ -1,5 +1,6 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <atomic>
 #include <cmath>
 #include <csignal>
 #include <cstdio>
@@ -25,6 +26,8 @@
 octree_t octree;
 body_t *bodies;
 
+std::atomic<bool> close_window(false);
+
 bool record = false;
 bool use_gpu = false;
 bool use_bh = false;
@@ -34,7 +37,8 @@ int N = 5000;
 void signalHandler(int signum) {
   std::cout << "\nInterrupt signal (" << signum << ") received." << std::endl;
   Benchmark::getInstance().saveResults("nbody_benchmark.csv");
-  cleanup_graphics(bodies);
+  close_window = true;
+
 #ifdef CUDA_FOUND
   if (use_gpu) {
     if (use_bh) {
@@ -135,7 +139,7 @@ int main(int argc, char **argv) {
   float zoom = 0.2;
   std::signal(SIGINT, signalHandler);
 
-  while (!glfwWindowShouldClose(window)) {
+  while (!glfwWindowShouldClose(window) && !close_window) {
     double start_time = glfwGetTime();
     glfwPollEvents();
 
@@ -203,6 +207,10 @@ int main(int argc, char **argv) {
     // time it
     float frame_time = glfwGetTime() - start_time;
     draw(bodies, N, frame_time, zoom);
+
+    if (close_window) {
+      glfwSetWindowShouldClose(window, GLFW_TRUE);
+    }
   }
 
   // pclose(ffmpeg);
