@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include <getopt.h>
+#include <string>
 
 #define G 1
 #define DT 0.001
@@ -33,6 +34,7 @@ bool use_gpu = false;
 bool use_bh = false;
 bool benchmark = false;
 int N = 5000;
+unsigned int iters = UINT_MAX;
 
 void signalHandler(int signum) {
   std::cout << "\nInterrupt signal (" << signum << ") received." << std::endl;
@@ -52,8 +54,12 @@ void signalHandler(int signum) {
 }
 
 int main(int argc, char **argv) {
-  // flags: --record --device=[cpu/gpu] --algo=[bh/naive] -n [number of
-  // particles]
+  // flags:
+  // --record
+  // --benchmark
+  // --device=[cpu/gpu]
+  // --algo=[bh/naive]
+  // --num-particles [number of particles]
 
   static struct option long_options[] = {
       {"record", no_argument, nullptr, 'r'},
@@ -61,16 +67,20 @@ int main(int argc, char **argv) {
       {"device", required_argument, nullptr, 'd'},
       {"algo", required_argument, nullptr, 'a'},
       {"num-particles", required_argument, nullptr, 'n'},
+      {"iters", required_argument, nullptr, 'i'},
       {nullptr, 0, nullptr, 0}};
 
   int opt;
   int option_index = 0;
 
-  while ((opt = getopt_long(argc, argv, "rbd:a:n:", long_options,
+  while ((opt = getopt_long(argc, argv, "rbd:a:n:i:", long_options,
                             &option_index)) != -1) {
     switch (opt) {
     case 'r':
       record = true;
+      break;
+    case 'b':
+      benchmark = true;
       break;
     case 'd':
       if (strcmp(optarg, "gpu") == 0) {
@@ -91,11 +101,11 @@ int main(int argc, char **argv) {
         return -1;
       }
       break;
-    case 'b':
-      benchmark = true;
-      break;
     case 'n':
       N = (int)strtod(optarg, nullptr);
+      break;
+    case 'i':
+      iters = (int)strtod(optarg, nullptr);
       break;
     default:
       break;
@@ -138,7 +148,7 @@ int main(int argc, char **argv) {
 
   float zoom = 0.2;
   std::signal(SIGINT, signalHandler);
-
+  int current_iter = 0;
   while (!glfwWindowShouldClose(window) && !close_window) {
     double start_time = glfwGetTime();
     glfwPollEvents();
@@ -208,9 +218,12 @@ int main(int argc, char **argv) {
     float frame_time = glfwGetTime() - start_time;
     draw(bodies, N, frame_time, zoom);
 
-    if (close_window) {
+    if (close_window ||
+        current_iter >= iters - 1) { // needed because we catch ctrl-c signal
       glfwSetWindowShouldClose(window, GLFW_TRUE);
+      break;
     }
+    current_iter++;
   }
 
   // pclose(ffmpeg);
@@ -226,6 +239,9 @@ int main(int argc, char **argv) {
     }
   }
 #endif
-  Benchmark::getInstance().saveResults("benchmark_results.csv");
+
+    std::ostringstream filename;
+    filename << "benchmarks/benchmark_results_N" << N << "_BH" << (int)use_bh << "_GPU" << (int)use_gpu <<".csv";
+  Benchmark::getInstance().saveResults(filename.str());
   return 0;
 }

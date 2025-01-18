@@ -12,7 +12,7 @@
 // mimic main.cpp defaults
 __constant__ float G = 1;
 __constant__ float dt = 0.001;
-__constant__ float theta_sq = 0.8f * 0.8f;
+__constant__ float theta_sq = 1.0f * 1.0f;
 __constant__ float eps_sq = 0.05f * 0.05f;
 
 int numBlocks;
@@ -69,6 +69,8 @@ __global__ void naive_kernel(int pointCount, body_t *bodies) {
 __global__ void bh_kernel(body_t *bodies, octree_t *octree) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
+  if (tid >= octree->max_nodes) return;
+
   int node = ROOT;
   float3 acceleration = {0, 0, 0};
   float4 position = bodies[tid].position;
@@ -88,7 +90,7 @@ __global__ void bh_kernel(body_t *bodies, octree_t *octree) {
       acceleration.y += dy * acc;
       acceleration.z += dz * acc;
 
-      if (n.next == ROOT) {
+      if (n.next == ROOT || n.next >= octree->num_nodes) {
         break;
       }
       node = n.next;
@@ -108,12 +110,15 @@ __global__ void bh_kernel(body_t *bodies, octree_t *octree) {
         acceleration.y += dy * acc;
         acceleration.z += dz * acc;
       }
-      if (n.next == ROOT) {
+      if (n.next == ROOT || n.next >= octree->num_nodes) {
         break;
       }
       node = n.next;
       __syncthreads();
     } else {
+      if (n.children >= octree->num_nodes){
+        break;
+      }
       node = n.children;
       __syncthreads();
     }
@@ -127,9 +132,9 @@ __global__ void bh_kernel(body_t *bodies, octree_t *octree) {
 __global__ void update_pos_kernel(int pointCount, body_t *bodies) {
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i < pointCount) {
-    atomicAdd(&bodies[i].position.x, bodies[i].velocity.x);
-    atomicAdd(&bodies[i].position.y, bodies[i].velocity.y);
-    atomicAdd(&bodies[i].position.z, bodies[i].velocity.z);
+    atomicAdd(&bodies[i].position.x, bodies[i].velocity.x * dt);
+    atomicAdd(&bodies[i].position.y, bodies[i].velocity.y * dt);
+    atomicAdd(&bodies[i].position.z, bodies[i].velocity.z * dt);
   }
   __syncthreads();
 }

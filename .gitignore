@@ -2,3 +2,4 @@
 /CMakeFiles/
 /.cache/
 /.mypy_cache/
+*.csv
