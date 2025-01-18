@@ -1,3 +1,4 @@
+#include "benchmark.h"
 #include "nbody_cuda.cuh"
 #include "structures.h"
 #include "timer.h"
@@ -5,12 +6,13 @@
 #include <cstddef>
 #include <iterator>
 
-#define BLOCK_SIZE 128
-#define MAX_STACK_DEPTH 64
-#define nStreams 64
+#define BLOCK_SIZE 256
+#define nStreams 12
 
 // constant memory
-__constant__ float G = 6.67408e-11;
+// mimic main.cpp defaults
+__constant__ float G = 1;
+__constant__ float dt = 0.001;
 __constant__ float theta_sq = 0.8f * 0.8f;
 __constant__ float eps_sq = 0.05f * 0.05f;
 
@@ -62,9 +64,9 @@ __global__ void naive_kernel(int pointCount, body_t *bodies) {
       float invDist3 = invDist * invDist * invDist;
       float force = G * particle.w * other.w * invDist3;
       float fw = force / particle.w;
-      bodies[particle_idx].velocity.x += dx * fw;
-      bodies[particle_idx].velocity.y += dy * fw;
-      bodies[particle_idx].velocity.z += dz * fw;
+      bodies[particle_idx].velocity.x += dx * fw * dt;
+      bodies[particle_idx].velocity.y += dy * fw * dt;
+      bodies[particle_idx].velocity.z += dz * fw * dt;
     }
     __syncthreads();
   }
@@ -72,8 +74,6 @@ __global__ void naive_kernel(int pointCount, body_t *bodies) {
 
 __global__ void bh_kernel(body_t *bodies, octree_t *octree) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
-
-  __syncthreads();
 
   int node = ROOT;
   float3 acceleration = {0, 0, 0};
@@ -86,7 +86,7 @@ __global__ void bh_kernel(body_t *bodies, octree_t *octree) {
     float dz = n.center_of_mass.z - position.z;
     float d_sq = dx * dx + dy * dy + dz * dz + eps_sq;
 
-    if (4*n.box.half_extent * n.box.half_extent < theta_sq * d_sq) {
+    if (4 * n.box.half_extent * n.box.half_extent < theta_sq * d_sq) {
       float inv_d = rsqrtf(d_sq);
       float acc = G * n.center_of_mass.w * inv_d * inv_d * inv_d;
 
@@ -125,9 +125,9 @@ __global__ void bh_kernel(body_t *bodies, octree_t *octree) {
     }
   }
 
-  atomicAdd(&bodies[tid].velocity.x, acceleration.x);
-  atomicAdd(&bodies[tid].velocity.y, acceleration.y);
-  atomicAdd(&bodies[tid].velocity.z, acceleration.z);
+  atomicAdd(&bodies[tid].velocity.x, acceleration.x * dt);
+  atomicAdd(&bodies[tid].velocity.y, acceleration.y * dt);
+  atomicAdd(&bodies[tid].velocity.z, acceleration.z * dt);
 }
 
 __global__ void update_pos_kernel(int pointCount, body_t *bodies) {
@@ -141,6 +141,7 @@ __global__ void update_pos_kernel(int pointCount, body_t *bodies) {
 }
 
 void gpu_update_position(int N, body_t *bodies) {
+  BENCHMARK_START("BodiesD2H");
   for (int i = 0; i < nStreams; ++i) {
     int offset = i * updateChunks;
     int currentChunkSize = std::min(updateChunks, N - offset);
@@ -159,6 +160,7 @@ void gpu_update_position(int N, body_t *bodies) {
   for (int i = 0; i < nStreams; ++i) {
     cudaStreamSynchronize(streams[i]);
   }
+  BENCHMARK_STOP("BodiesD2H");
 }
 
 void gpu_pin_mem(int N, body_t *bodies) {
@@ -185,8 +187,10 @@ void gpu_setup(int N, body_t *bodies) {
 }
 
 void gpu_update_naive(int N, body_t *bodies) {
+  BENCHMARK_START("UpdateNaive_GPU");
   naive_kernel<<<numPairBlocks, BLOCK_SIZE>>>(N, d_bodies);
   cudaDeviceSynchronize();
+  BENCHMARK_STOP("UpdateNaive_GPU");
   cudaCheckErrors("STEP Kernel execution failed");
   gpu_update_position(N, bodies);
 }
@@ -216,24 +220,23 @@ void gpu_update_bh(int N, body_t *bodies, octree_t *octree) {
     bh_setup = true;
   }
 
-  Timer tim = Timer(true);
-  tim.start();
+  BENCHMARK_START("OctreeH2D");
   cudaMemcpy(d_nodes, octree->nodes, octree->max_nodes * sizeof(node_t),
              cudaMemcpyHostToDevice);
-  printf("H2D %f\n\n", tim.elapsed());
+  BENCHMARK_STOP("OctreeH2D");
 
+  BENCHMARK_START("UpdateBH_GPU");
   bh_kernel<<<numBlocks, BLOCK_SIZE>>>(d_bodies, d_octree);
   cudaDeviceSynchronize();
+  BENCHMARK_STOP("UpdateBH_GPU");
   cudaCheckErrors("STEP Kernel execution failed");
-  printf("Update Kernel %f\n", tim.elapsed());
-  tim.start();
 
   gpu_update_position(N, bodies);
-  printf("D2H %f\n\n", tim.stop());
 }
 
-void gpu_cleanup_bh() {
+void gpu_cleanup_bh(body_t *bodies) {
   cudaFree(d_bodies);
+  cudaFreeHost(bodies);
   cudaFree(d_octree);
   cudaFree(d_nodes);
 

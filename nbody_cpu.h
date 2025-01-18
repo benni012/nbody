@@ -1,10 +1,6 @@
-//
-// Created by Ben Chwalek on 10.12.24.
-//
-
 #ifndef NBODY_NBODY_CPU_H
 #define NBODY_NBODY_CPU_H
-#include "graphics.h"
+#include "structures.h"
 
 void cpu_update_naive(int N, body_t *bodies) {
 #pragma omp parallel for

@@ -20,6 +20,7 @@ endif()
 add_executable(nbody
     nbody_cuda.cuh
     nbody_cuda.cu
+    benchmark.h
     graphics.h
     structures.h
     nbody_cpu.h

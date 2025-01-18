@@ -1,6 +1,7 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <cmath>
+#include <csignal>
 #include <cstdio>
 #include <cstring>
 #include <getopt.h>
@@ -9,18 +10,42 @@
 #define DT 0.001
 #define EPS_SQ (0.05 * 0.05)
 
-#include "structures.h"
-
 #ifdef CUDA_FOUND
 #include "nbody_cuda.cuh"
 #include <cuda.h>
 #include <cuda_runtime.h>
 #endif
 
-#include "octree.h"
+#include "benchmark.h"
 #include "graphics.h"
 #include "nbody_cpu.h"
+#include "octree.h"
+#include "structures.h"
+
 octree_t octree;
+body_t *bodies;
+
+bool record = false;
+bool use_gpu = false;
+bool use_bh = false;
+bool benchmark = false;
+int N = 5000;
+
+void signalHandler(int signum) {
+  std::cout << "\nInterrupt signal (" << signum << ") received." << std::endl;
+  Benchmark::getInstance().saveResults("nbody_benchmark.csv");
+  cleanup_graphics(bodies);
+#ifdef CUDA_FOUND
+  if (use_gpu) {
+    if (use_bh) {
+      gpu_cleanup_bh(bodies);
+    } else {
+      gpu_cleanup_naive(bodies);
+    }
+  }
+#endif
+  exit(signum);
+}
 
 int main(int argc, char **argv) {
   // flags: --record --device=[cpu/gpu] --algo=[bh/naive] -n [number of
@@ -31,14 +56,11 @@ int main(int argc, char **argv) {
       {"device", required_argument, nullptr, 'd'},
       {"algo", required_argument, nullptr, 'a'},
       {"num-particles", required_argument, nullptr, 'n'},
+      {"benchmark", no_argument, nullptr, 'b'},
       {nullptr, 0, nullptr, 0}};
 
   int opt;
   int option_index = 0;
-  bool record = false;
-  bool use_gpu = false;
-  bool use_bh = false;
-  int N = 5000;
 
   while ((opt = getopt_long(argc, argv, "rd:a:n:", long_options,
                             &option_index)) != -1) {
@@ -65,6 +87,9 @@ int main(int argc, char **argv) {
         return -1;
       }
       break;
+    case 'b':
+      benchmark = true;
+      break;
     case 'n':
       N = (int)strtod(optarg, nullptr);
       break;
@@ -73,6 +98,7 @@ int main(int argc, char **argv) {
     }
   }
 
+  Benchmark::getInstance().enableBenchmarking(benchmark);
 #ifndef CUDA_FOUND
   if (use_gpu) {
     fprintf(stderr, "CUDA not found, falling back to CPU\n");
@@ -80,45 +106,49 @@ int main(int argc, char **argv) {
   }
 #endif
 
-  body_t *bodies = (body_t *)calloc(N, sizeof(body_t));
+  bodies = (body_t *)calloc(N, sizeof(body_t));
 
   // Initialize everything
-  initGraphics(N, bodies);
+  init_graphics(N, bodies);
   { populate(bodies, N); }
 #ifdef CUDA_FOUND
   gpu_pin_mem(N, bodies);
   gpu_setup(N, bodies);
 #endif
 
-  //    // start ffmpeg telling it to expect raw rgba 720p-60hz frames
-  //// -i - tells it to read frames from stdin
-  //    const char* cmd = "ffmpeg -r 60 -f rawvideo -pix_fmt rgba -s 2560x1440
-  //    -i - "
-  //                      "-threads 0 -preset fast -y -pix_fmt yuv420p -crf 21
-  //                      -vf vflip output.mp4";
-  ////    const char* cmd = "cat";
-  //
-  //// open pipe to ffmpeg's stdin in binary write mode
-  //    FILE* ffmpeg = popen(cmd, "w");
-  //    if (!ffmpeg) {
-  //        fprintf(stderr, "Could not open pipe to ffmpeg\n");
-  //        return -1;
-  //    }
+  /*
+        // start ffmpeg telling it to expect raw rgba 720p-60hz frames
+        // -i - tells it to read frames from stdin
+        const char* cmd = "ffmpeg -r 60 -f rawvideo -pix_fmt rgba -s 2560x1440-i
+     - "
+                          "-threads 0 -preset fast -y -pix_fmt yuv420p -crf 21
+     -vf vflip output.mp4";
 
-  float zoom = 1.0;
+        // open pipe to ffmpeg's stdin in binary write mode
+        FILE* ffmpeg = popen(cmd, "w");
+        if (!ffmpeg) {
+            fprintf(stderr, "Could not open pipe to ffmpeg\n");
+            return -1;
+        }
+  */
+
+  float zoom = 0.2;
+  std::signal(SIGINT, signalHandler);
 
   while (!glfwWindowShouldClose(window)) {
     double start_time = glfwGetTime();
     glfwPollEvents();
 
-    // scroll wheel
-    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
-      zoom *= 1.1;
-    } else if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
-      zoom /= 1.1;
+    // scroll wheel or +/- keys
+    if (glfwGetKey(window, GLFW_KEY_KP_ADD) == GLFW_PRESS ||
+        glfwGetKey(window, GLFW_KEY_EQUAL) == GLFW_PRESS) {
+      zoom *= 1.1; // Zoom in
+    } else if (glfwGetKey(window, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS ||
+               glfwGetKey(window, GLFW_KEY_MINUS) == GLFW_PRESS) {
+      zoom /= 1.1; // Zoom out
     }
 
-    if (use_bh) {
+    if (use_bh) { // BARNES HUT BODY UPDATES
       octree_free(&octree);
       double current_time = start_time;
       // find min/max of positions
@@ -132,37 +162,42 @@ int main(int argc, char **argv) {
         max.y = fmaxf(max.y, bodies[i].position.y);
         max.z = fmaxf(max.z, bodies[i].position.z);
       }
-      float3 center = {(min.x + max.x) / 2, 
-                       (min.y + max.y) / 2,
+      float3 center = {(min.x + max.x) / 2, (min.y + max.y) / 2,
                        (min.z + max.z) / 2};
       // create octree
+      BENCHMARK_START("OctreeInit");
       octree_init(&octree, center,
                   fmaxf(max.x - min.x, fmaxf(max.y - min.y, max.z - min.z)), N);
-      octree_build(&octree, bodies, N);
-      fprintf(stderr, "Time for init: %f\n", glfwGetTime() - current_time);
-      current_time = glfwGetTime();
+      BENCHMARK_STOP("OctreeInit");
 
+      BENCHMARK_START("OctreeBuild");
+      octree_build(&octree, bodies, N);
+      BENCHMARK_STOP("OctreeBuild");
+
+      BENCHMARK_START("OctreeProxies");
       octree_calculate_proxies(&octree, ROOT);
-      fprintf(stderr, "Time for proxies: %f\n", glfwGetTime() - current_time);
-      current_time = glfwGetTime();
+      BENCHMARK_STOP("OctreeProxies");
 
 #ifdef CUDA_FOUND
       if (use_gpu) {
         gpu_update_bh(N, bodies, &octree);
       }
 #endif
-      if (!use_gpu && use_bh) {
-      cpu_update_bh(N, bodies, &octree);
+      if (!use_gpu) {
+        BENCHMARK_START("UpdateBH_CPU");
+        cpu_update_bh(N, bodies, &octree);
+        BENCHMARK_STOP("UpdateBH_CPU");
       }
-      fprintf(stderr, "Time for update: %f\n", glfwGetTime() - current_time);
-    } else {
+    } else { // NAIVE BODY UPDATES
 #ifdef CUDA_FOUND
       if (use_gpu) {
         gpu_update_naive(N, bodies);
       }
 #endif
-      if (!use_gpu && !use_bh) {
+      if (!use_gpu) {
+        BENCHMARK_START("UpdateNaive_CPU");
         cpu_update_naive(N, bodies);
+        BENCHMARK_STOP("UpdateBH_CPU");
       }
     }
     // time it
@@ -170,13 +205,19 @@ int main(int argc, char **argv) {
     draw(bodies, N, frame_time, zoom);
   }
 
-  //    pclose(ffmpeg);
+  // pclose(ffmpeg);
 
-  cleanup(bodies);
+  // CLEANUP
+  cleanup_graphics(bodies);
 #ifdef CUDA_FOUND
   if (use_gpu) {
-    gpu_cleanup_naive(bodies);
+    if (use_bh) {
+      gpu_cleanup_bh(bodies);
+    } else {
+      gpu_cleanup_naive(bodies);
+    }
   }
 #endif
+  Benchmark::getInstance().saveResults("benchmark_results.csv");
   return 0;
 }
