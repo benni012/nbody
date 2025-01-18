@@ -57,16 +57,16 @@ int main(int argc, char **argv) {
 
   static struct option long_options[] = {
       {"record", no_argument, nullptr, 'r'},
+      {"benchmark", no_argument, nullptr, 'b'},
       {"device", required_argument, nullptr, 'd'},
       {"algo", required_argument, nullptr, 'a'},
       {"num-particles", required_argument, nullptr, 'n'},
-      {"benchmark", no_argument, nullptr, 'b'},
       {nullptr, 0, nullptr, 0}};
 
   int opt;
   int option_index = 0;
 
-  while ((opt = getopt_long(argc, argv, "rd:a:n:", long_options,
+  while ((opt = getopt_long(argc, argv, "rbd:a:n:", long_options,
                             &option_index)) != -1) {
     switch (opt) {
     case 'r':
