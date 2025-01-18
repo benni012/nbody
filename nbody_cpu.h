@@ -14,27 +14,27 @@ void cpu_update_naive(int N, body_t *bodies) {
       float dy = bodies[j].position.y - bodies[i].position.y;
       float dz = bodies[j].position.z - bodies[i].position.z;
 
-      float distSq = dx * dx + dy * dy + dz * dz;
+      float distSq = dx * dx + dy * dy + dz * dz + EPS_SQ;
 
       float invDist = 1.0f / sqrtf(distSq);
       float invDist3 = invDist * invDist * invDist;
 
       float force = G * bodies[i].position.w * bodies[j].position.w * invDist3;
 
-      bodies[i].velocity.x += dx * force / bodies[i].position.w;
-      bodies[i].velocity.y += dy * force / bodies[i].position.w;
-      bodies[i].velocity.z += dz * force / bodies[i].position.w;
+      bodies[i].velocity.x += dx * force / bodies[i].position.w * DT;
+      bodies[i].velocity.y += dy * force / bodies[i].position.w * DT;
+      bodies[i].velocity.z += dz * force / bodies[i].position.w * DT;
 
-      bodies[j].velocity.x -= dx * force / bodies[j].position.w;
-      bodies[j].velocity.y -= dy * force / bodies[j].position.w;
-      bodies[j].velocity.z -= dz * force / bodies[j].position.w;
+      bodies[j].velocity.x -= dx * force / bodies[j].position.w * DT;
+      bodies[j].velocity.y -= dy * force / bodies[j].position.w * DT;
+      bodies[j].velocity.z -= dz * force / bodies[j].position.w * DT;
     }
   }
 
   for (int i = 0; i < N; i++) {
-    bodies[i].position.x += bodies[i].velocity.x;
-    bodies[i].position.y += bodies[i].velocity.y;
-    bodies[i].position.z += bodies[i].velocity.z;
+    bodies[i].position.x += bodies[i].velocity.x * DT;
+    bodies[i].position.y += bodies[i].velocity.y * DT;
+    bodies[i].position.z += bodies[i].velocity.z * DT;
   }
 }
 
@@ -94,17 +94,17 @@ void cpu_update_bh(int N, body_t *bodies, octree_t *octree) {
 #pragma omp parallel for
   for (int i = 0; i < N; i++) {
     float3 acceleration =
-        octree_calculate_acceleration(octree, bodies[i].position, bodies, 0.8);
-    bodies[i].velocity.x += acceleration.x;
-    bodies[i].velocity.y += acceleration.y;
-    bodies[i].velocity.z += acceleration.z;
+        octree_calculate_acceleration(octree, bodies[i].position, bodies, 1.0);
+    bodies[i].velocity.x += acceleration.x * DT;
+    bodies[i].velocity.y += acceleration.y * DT;
+    bodies[i].velocity.z += acceleration.z * DT;
   }
 
   // Update positions
   for (int i = 0; i < N; i++) {
-    bodies[i].position.x += bodies[i].velocity.x;
-    bodies[i].position.y += bodies[i].velocity.y;
-    bodies[i].position.z += bodies[i].velocity.z;
+    bodies[i].position.x += bodies[i].velocity.x * DT;
+    bodies[i].position.y += bodies[i].velocity.y * DT;
+    bodies[i].position.z += bodies[i].velocity.z * DT;
   }
 }
 #endif // NBODY_NBODY_CPU_H
