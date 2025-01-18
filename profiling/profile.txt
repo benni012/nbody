@@ -1,4 +1,0 @@
-kernel name                     |flops  (float int    bit  )|copy  |branch|cache  (load  store)|memory (load  cached store)
---------------------------------|---------------------------|------|------|--------------------|---------------------------
-_Z12naive_kernelP6float4P6float3i|   189    141     20     28|    36|    10|   128    112     16|    56     44      0     12
-_Z13update_kernelP6float4P6float3i|    10      3      6      1|     8|     1|     0      0      0|    40     28      0     12
