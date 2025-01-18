@@ -21,24 +21,24 @@ struct alignas(16) body_t {
     float4 position;
     float3 velocity;
 };
-typedef struct box {
+struct alignas(16) box_t {
     float3 center;
     float half_extent;
-} box_t;
+};
 
-typedef struct node {
+struct alignas(32) node_t {
     int children;
     box_t box;
     float4 center_of_mass;
     int pos_idx;
     int count;
     int next;
-} node_t;
+};
 
-typedef struct octree {
+struct alignas(32) octree_t {
     node_t* nodes;
     int num_nodes;
     int max_nodes;
-} octree_t;
+};
 
 #endif // NBODY_STRUCTURES_H
