@@ -5,7 +5,8 @@
 #include <cstring>
 #include <getopt.h>
 
-#define G 6.67408e-11
+#define G 1
+#define DT 0.001
 #define EPS_SQ (0.05 * 0.05)
 
 #include "structures.h"
@@ -104,9 +105,18 @@ int main(int argc, char **argv) {
   //        return -1;
   //    }
 
+  float zoom = 1.0;
+
   while (!glfwWindowShouldClose(window)) {
     double start_time = glfwGetTime();
-    //        glfwPollEvents();
+    glfwPollEvents();
+
+    // scroll wheel
+    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
+      zoom *= 1.1;
+    } else if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+      zoom /= 1.1;
+    }
 
     if (use_bh) {
       octree_free(&octree);
@@ -157,7 +167,7 @@ int main(int argc, char **argv) {
     }
     // time it
     float frame_time = glfwGetTime() - start_time;
-    draw(bodies, N, frame_time);
+    draw(bodies, N, frame_time, zoom);
   }
 
   //    pclose(ffmpeg);
