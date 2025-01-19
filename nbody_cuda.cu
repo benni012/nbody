@@ -65,18 +65,31 @@ __global__ void naive_kernel(int pointCount, body_t *bodies) {
     __syncthreads();
   }
 }
-
 __global__ void bh_kernel(body_t *bodies, octree_t *octree) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (tid >= octree->max_nodes) return;
+  // make room for 3 levels of the octree
+  // level 1: 1
+  // level 2: 8
+  // level 3: 64
+  // total 73
+  __shared__ node_t shared_nodes[73];
+  if (tid < 73 && tid <= octree->num_nodes) {
+    shared_nodes[tid] =
+        octree->nodes[tid];
+  }
+  __syncthreads(); // Ensure the memory is copied before continuing
+
+  if (tid >= octree->max_nodes)
+    return;
 
   int node = ROOT;
   float3 acceleration = {0, 0, 0};
-  float4 position = bodies[tid].position;
+  __const__ float4 position = bodies[tid].position;
 
   while (true) {
-    node_t n = octree->nodes[node];
+    const node_t n = (node < 73 ) ? shared_nodes[node] : octree->nodes[node];
+
     float dx = n.center_of_mass.x - position.x;
     float dy = n.center_of_mass.y - position.y;
     float dz = n.center_of_mass.z - position.z;
@@ -94,7 +107,6 @@ __global__ void bh_kernel(body_t *bodies, octree_t *octree) {
         break;
       }
       node = n.next;
-      __syncthreads();
     } else if (n.children == ROOT) {
       for (int j = n.pos_idx; j < n.pos_idx + n.count; j++) {
         float4 other = bodies[j].position;
@@ -114,27 +126,25 @@ __global__ void bh_kernel(body_t *bodies, octree_t *octree) {
         break;
       }
       node = n.next;
-      __syncthreads();
     } else {
-      if (n.children >= octree->num_nodes){
+      if (n.children >= octree->num_nodes) {
         break;
       }
       node = n.children;
-      __syncthreads();
     }
   }
 
-  atomicAdd(&bodies[tid].velocity.x, acceleration.x * dt);
-  atomicAdd(&bodies[tid].velocity.y, acceleration.y * dt);
-  atomicAdd(&bodies[tid].velocity.z, acceleration.z * dt);
+  bodies[tid].velocity.x += acceleration.x * dt;
+  bodies[tid].velocity.y += acceleration.y * dt;
+  bodies[tid].velocity.z += acceleration.z * dt;
 }
 
 __global__ void update_pos_kernel(int pointCount, body_t *bodies) {
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i < pointCount) {
-    atomicAdd(&bodies[i].position.x, bodies[i].velocity.x * dt);
-    atomicAdd(&bodies[i].position.y, bodies[i].velocity.y * dt);
-    atomicAdd(&bodies[i].position.z, bodies[i].velocity.z * dt);
+    bodies[i].position.x += bodies[i].velocity.x * dt;
+    bodies[i].position.y += bodies[i].velocity.y * dt;
+    bodies[i].position.z += bodies[i].velocity.z * dt;
   }
   __syncthreads();
 }
@@ -200,10 +210,10 @@ void gpu_update_bh(int N, body_t *bodies, octree_t *octree) {
              cudaMemcpyHostToDevice);
   BENCHMARK_STOP("OctreeH2D");
 
-  BENCHMARK_START("UpdateBH_GPU");
+  BENCHMARK_START("AccUpdateBH_GPU");
   bh_kernel<<<numBlocks, BLOCK_SIZE>>>(d_bodies, d_octree);
   cudaDeviceSynchronize();
-  BENCHMARK_STOP("UpdateBH_GPU");
+  BENCHMARK_STOP("AccUpdateBH_GPU");
   cudaCheckErrors("STEP Kernel execution failed");
 
   gpu_update_position(N, bodies);
