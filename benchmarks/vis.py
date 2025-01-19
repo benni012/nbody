@@ -53,7 +53,7 @@ for gpu in [0, 1]:
         alpha=0.9
     )
     
-    for i, function in enumerate(unique_functions):
+    for i, function in enumerate(unique_functions[::-1]):
         func_df = gpu_df[gpu_df["Function"] == function]
         func_df = func_df.sort_values(by="N")
         func_df["Mean Time (us)"] = func_df["Mean Time (us)"].clip(1., None)
@@ -73,6 +73,6 @@ plt.title("Runtime Breakdown by Function: GPU 0 vs GPU 1")
 plt.legend(loc="best", fontsize="small")
 plt.grid(True)
 # plt.yscale("log")
-plt.xscale("log")
+# plt.xscale("log")
 plt.tight_layout()
 plt.show()
