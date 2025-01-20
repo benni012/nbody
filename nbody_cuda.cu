@@ -65,7 +65,7 @@ __global__ void naive_kernel(int pointCount, body_t *bodies) {
     __syncthreads();
   }
 }
-__global__ void bh_kernel(body_t *bodies, octree_t *octree) {
+__global__ void bh_kernel(body_t *bodies, octree_t *__restrict octree) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
   // make room for 3 levels of the octree
