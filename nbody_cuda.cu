@@ -68,15 +68,17 @@ __global__ void naive_kernel(int pointCount, body_t *bodies) {
 __global__ void bh_kernel(body_t *bodies, octree_t *__restrict octree) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
-  // make room for 3 levels of the octree
+  // make room for 4 levels of the octree
   // level 1: 1
   // level 2: 8
   // level 3: 64
-  // total 73
-  __shared__ node_t shared_nodes[73];
-  if (tid < 73 && tid <= octree->num_nodes) {
-    shared_nodes[tid] =
-        octree->nodes[tid];
+  // level 4: 512
+  // total 585
+  __shared__ node_t shared_nodes[585];
+  if (tid < BLOCK_SIZE) {
+    for (int i = tid; i < fminf(octree->num_nodes, 585); i += BLOCK_SIZE) {
+      shared_nodes[i] = octree->nodes[i];
+    }
   }
   __syncthreads(); // Ensure the memory is copied before continuing
 
@@ -88,7 +90,7 @@ __global__ void bh_kernel(body_t *bodies, octree_t *__restrict octree) {
   __const__ float4 position = bodies[tid].position;
 
   while (true) {
-    const node_t n = (node < 73 ) ? shared_nodes[node] : octree->nodes[node];
+    const node_t n = (node < 585) ? shared_nodes[node] : octree->nodes[node];
 
     float dx = n.center_of_mass.x - position.x;
     float dy = n.center_of_mass.y - position.y;
