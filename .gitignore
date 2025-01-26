@@ -1,5 +1,5 @@
 /cmake-build-debug/
 /CMakeFiles/
 /.cache/
-/.mypy_cache/
+*.mypy_cache/*
 *.csv

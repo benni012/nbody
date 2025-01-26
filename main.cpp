@@ -211,7 +211,7 @@ int main(int argc, char **argv) {
       if (!use_gpu) {
         BENCHMARK_START("UpdateNaive_CPU");
         cpu_update_naive(N, bodies);
-        BENCHMARK_STOP("UpdateBH_CPU");
+        BENCHMARK_STOP("UpdateNaive_CPU");
       }
     }
     // time it
