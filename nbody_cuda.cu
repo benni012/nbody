@@ -1,23 +1,18 @@
 #include "benchmark.h"
 #include "nbody_cuda.cuh"
 #include "structures.h"
-#include "timer.h"
 #include <cmath>
-#include <cstddef>
-#include <iterator>
 
-#define BLOCK_SIZE 256
+#define BLOCK_SIZE 128
 
 // constant memory
 // mimic main.cpp defaults
 __constant__ float G = 1;
-__constant__ float dt = 0.001;
+__constant__ float dt = 0.0011;
 __constant__ float theta_sq = 1.0f * 1.0f;
 __constant__ float eps_sq = 0.05f * 0.05f;
 
 int numBlocks;
-int totalPairs;
-int numPairBlocks;
 
 body_t *d_bodies;
 
@@ -66,31 +61,33 @@ __global__ void naive_kernel(int pointCount, body_t *bodies) {
   }
 }
 __global__ void bh_kernel(body_t *bodies, octree_t *__restrict octree) {
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int particle_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-  // make room for 4 levels of the octree
+  // make room for 3 levels of the octree
   // level 1: 1
   // level 2: 8
   // level 3: 64
-  // level 4: 512
-  // total 585
-  __shared__ node_t shared_nodes[585];
-  if (tid < BLOCK_SIZE) {
-    for (int i = tid; i < fminf(octree->num_nodes, 585); i += BLOCK_SIZE) {
+  // total 73
+  __shared__ node_t shared_nodes[73];
+    for (int i = particle_idx%BLOCK_SIZE; i < fminf(octree->num_nodes, 73); i += BLOCK_SIZE) {
       shared_nodes[i] = octree->nodes[i];
     }
-  }
   __syncthreads(); // Ensure the memory is copied before continuing
 
-  if (tid >= octree->max_nodes)
+  if (particle_idx >= octree->max_nodes)
     return;
 
   int node = ROOT;
   float3 acceleration = {0, 0, 0};
-  __const__ float4 position = bodies[tid].position;
+  __const__ float4 position = bodies[particle_idx].position;
 
+  node_t n;
   while (true) {
-    const node_t n = (node < 585) ? shared_nodes[node] : octree->nodes[node];
+    if (node < 73) {
+      n = shared_nodes[node];
+    } else {
+      n = octree->nodes[node];
+    }
 
     float dx = n.center_of_mass.x - position.x;
     float dy = n.center_of_mass.y - position.y;
@@ -136,17 +133,17 @@ __global__ void bh_kernel(body_t *bodies, octree_t *__restrict octree) {
     }
   }
 
-  bodies[tid].velocity.x += acceleration.x * dt;
-  bodies[tid].velocity.y += acceleration.y * dt;
-  bodies[tid].velocity.z += acceleration.z * dt;
+  bodies[particle_idx].velocity.x += acceleration.x * dt;
+  bodies[particle_idx].velocity.y += acceleration.y * dt;
+  bodies[particle_idx].velocity.z += acceleration.z * dt;
 }
 
 __global__ void update_pos_kernel(int pointCount, body_t *bodies) {
-  int i = blockIdx.x * blockDim.x + threadIdx.x;
-  if (i < pointCount) {
-    bodies[i].position.x += bodies[i].velocity.x * dt;
-    bodies[i].position.y += bodies[i].velocity.y * dt;
-    bodies[i].position.z += bodies[i].velocity.z * dt;
+  int particle_idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (particle_idx < pointCount) {
+    bodies[particle_idx].position.x += bodies[particle_idx].velocity.x * dt;
+    bodies[particle_idx].position.y += bodies[particle_idx].velocity.y * dt;
+    bodies[particle_idx].position.z += bodies[particle_idx].velocity.z * dt;
   }
   __syncthreads();
 }
@@ -170,8 +167,6 @@ void gpu_pin_mem(int N, body_t *bodies) {
 void gpu_setup(int N, body_t *bodies) {
   // kernel dims
   numBlocks = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
-  totalPairs = (N * (N - 1)) / 2;
-  numPairBlocks = (totalPairs + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
   // allocate and cpy bodies to device
   cudaMalloc(&d_bodies, N * sizeof(body_t));
@@ -180,7 +175,7 @@ void gpu_setup(int N, body_t *bodies) {
 
 void gpu_update_naive(int N, body_t *bodies) {
   BENCHMARK_START("AccUpdateNaive_GPU");
-  naive_kernel<<<numPairBlocks, BLOCK_SIZE>>>(N, d_bodies);
+  naive_kernel<<<numBlocks, BLOCK_SIZE>>>(N, d_bodies);
   cudaDeviceSynchronize();
   BENCHMARK_STOP("AccUpdateNaive_GPU");
   cudaCheckErrors("STEP Kernel execution failed");
