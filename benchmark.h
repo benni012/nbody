@@ -42,21 +42,26 @@ public:
   void saveResults(const std::string &filename) {
     if (!benchmarkingEnabled)
       return;
-    std::ofstream file(filename);
-    if (!file.is_open()) {
-      std::cerr << "Failed to open file: " << filename << std::endl;
-      return;
-    }
+
     std::cout << "Timings:" << std::endl;
     std::cout << std::left << std::setw(20) << "Function" << std::setw(10)
               << "Calls" << std::setw(20) << "Mean Time (us)" << "Std Dev (us)"
               << std::endl;
-    file << "Function,Calls,Mean Time (us),Std Dev (us)" << std::endl;
     for (const auto &[name, timings] : cpuTimings) {
       auto [mean, stdDev] = computeStats(timings);
       std::cout << std::left << std::setw(20) << name << std::setw(10)
                 << timings.size() << std::setw(20) << mean << std::setw(20)
                 << stdDev << std::endl;
+    }
+
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+      std::cerr << "Failed to open file: " << filename << std::endl;
+      return;
+    }
+    file << "Function,Calls,Mean Time (us),Std Dev (us)" << std::endl;
+    for (const auto &[name, timings] : cpuTimings) {
+      auto [mean, stdDev] = computeStats(timings);
       file << name << "," << timings.size() << "," << mean << "," << stdDev
            << std::endl;
     }
