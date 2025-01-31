@@ -7,6 +7,7 @@
 #include <cstring>
 #include <getopt.h>
 #include <string>
+#include <sstream>
 
 #define G 1
 #define DT 0.001
