@@ -94,10 +94,6 @@ void cpu_update_bh(int N, body_t *bodies, octree_t *octree) {
     bodies[i].velocity.x += acceleration.x * DT;
     bodies[i].velocity.y += acceleration.y * DT;
     bodies[i].velocity.z += acceleration.z * DT;
-  }
-
-  // Update positions
-  for (int i = 0; i < N; i++) {
     bodies[i].position.x += bodies[i].velocity.x * DT;
     bodies[i].position.y += bodies[i].velocity.y * DT;
     bodies[i].position.z += bodies[i].velocity.z * DT;
