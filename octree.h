@@ -7,6 +7,13 @@
 #include "structures.h"
 
 
+/**
+ * Initialize the octree
+ * @param octree Pointer to the octree
+ * @param center Spatial center of the octree
+ * @param half_extent Half extent of the octree
+ * @param max_nodes Maximum number of nodes in the octree
+ */
 void octree_init(octree_t *octree, float3 center, float half_extent, int max_nodes) {
     octree->nodes = new node_t[max_nodes];  // Allocate memory for the nodes
     octree->num_nodes = 1;
@@ -16,21 +23,24 @@ void octree_init(octree_t *octree, float3 center, float half_extent, int max_nod
     octree->nodes[ROOT] = {ROOT, {center, half_extent}, {0, 0, 0, 0}, 0, 0, 0};
 }
 
-int find_split(body_t *bodies, int start, int end, std::function<bool(body_t)> func) {
-    for (int i = start; i < end; i++) {
-        if (func(bodies[i])) {
-            return i;
-        }
-    }
-    return -1;
-}
-
+/**
+ * @brief Split the given octree node and reorder the bodies accordingly
+ *
+ * We are using ranges to represent the bodies in each node, so we need to reorder the bodies in the array, in order
+ * to keep the bodies of each node in a contiguous range.
+ *
+ * @param octree Pointer to the octree
+ * @param node Index of the node to split
+ * @param bodies Array of bodies
+ */
 void octree_split(octree_t *octree, int node, body_t *bodies) {
     node_t parent = octree->nodes[node];
     float3 center = parent.box.center;
-    
+
+    // The body ranges of the new children
     int split[] = {parent.pos_idx, 0, 0, 0, 0, 0, 0, 0, parent.pos_idx + parent.count};
 
+    // Partition the bodies based on the center of the parent node, order: z, y, x
     split[4] = std::partition(bodies + split[0], bodies + split[8], [&center](body_t a) -> bool {
         return a.position.z < center.z;
     }) - bodies;
@@ -58,6 +68,7 @@ void octree_split(octree_t *octree, int node, body_t *bodies) {
     int children = octree->num_nodes;
     octree->nodes[node].children = children;
 
+    // Set next pointers for the children, always as next sibling and for last child as the parent's next
     int nexts[8] = {children + 1,
                     children + 2,
                     children + 3,
@@ -74,6 +85,7 @@ void octree_split(octree_t *octree, int node, body_t *bodies) {
         return;
     }
 
+    // make children
     for (int i = 0; i < 8; i++) {
         float3 new_center = parent.box.center;
         new_center.x += half / 2 * (i & 1 ? 1 : -1);
@@ -88,6 +100,12 @@ void octree_split(octree_t *octree, int node, body_t *bodies) {
     }
 }
 
+/**
+ * @brief Calculate the center of mass and combined mass for each node in the octree
+ *
+ * @param octree Pointer to the octree
+ * @param node Index of the node to calculate the center of mass
+ */
 void octree_calculate_proxies(octree_t *octree, int node) {
     if (octree->nodes[node].children == ROOT) {
         return;
@@ -118,10 +136,22 @@ void octree_calculate_proxies(octree_t *octree, int node) {
     octree->nodes[node].center_of_mass = center_of_mass;
 }
 
+/**
+ * @brief Build the octree from the given bodies
+ *
+ * This function builds the octree from the given bodies. It starts from the root node and recursively splits the nodes
+ * until the LEAF_CAPACITY is reached. For each child node, the center of mass is calculated.
+ *
+ * @param octree Pointer to the octree
+ * @param bodies Array of bodies
+ * @param N Number of bodies
+ */
 void octree_build(octree_t *octree, body_t *bodies, int N) {
     octree->nodes[ROOT].pos_idx = 0;
     octree->nodes[ROOT].count = N;
 
+    // we walk through the tree array by index
+    // this is okay, because everything new will be appended to the end
     int node = 0;
     while (node < octree->num_nodes) {
         if (octree->nodes[node].count > LEAF_CAPACITY) {
@@ -144,6 +174,11 @@ void octree_build(octree_t *octree, body_t *bodies, int N) {
     }
 }
 
+/**
+ * @brief Free the memory allocated for the octree
+ *
+ * @param octree Pointer to the octree
+ */
 void octree_free(octree_t *octree) {
     if (octree->nodes != nullptr) {
         delete[] octree->nodes;  // Deallocate the memory for nodes

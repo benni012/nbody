@@ -38,201 +38,201 @@ int N = 5000;
 unsigned int iters = UINT_MAX;
 
 void signalHandler(int signum) {
-  std::cout << "\nInterrupt signal (" << signum << ") received." << std::endl;
-  Benchmark::getInstance().saveResults("nbody_benchmark.csv");
-  close_window = true;
+    std::cout << "\nInterrupt signal (" << signum << ") received." << std::endl;
+    Benchmark::getInstance().saveResults("nbody_benchmark.csv");
+    close_window = true;
 
 #ifdef CUDA_FOUND
-  if (use_gpu) {
+if (use_gpu) {
     if (use_bh) {
-      gpu_cleanup_bh(bodies);
+        gpu_cleanup_bh(bodies);
     } else {
-      gpu_cleanup_naive(bodies);
+        gpu_cleanup_naive(bodies);
     }
-  }
+}
 #endif
-  exit(signum);
+    exit(signum);
 }
 
 int main(int argc, char **argv) {
-  // flags:
-  // --record
-  // --benchmark
-  // --device=[cpu/gpu]
-  // --algo=[bh/naive]
-  // --num-particles [number of particles]
+    // flags:
+    // --record
+    // --benchmark
+    // --device=[cpu/gpu]
+    // --algo=[bh/naive]
+    // --num-particles [number of particles]
 
-  static struct option long_options[] = {
-      {"record", no_argument, nullptr, 'r'},
-      {"benchmark", no_argument, nullptr, 'b'},
-      {"device", required_argument, nullptr, 'd'},
-      {"algo", required_argument, nullptr, 'a'},
-      {"num-particles", required_argument, nullptr, 'n'},
-      {"iters", required_argument, nullptr, 'i'},
-      {nullptr, 0, nullptr, 0}};
+    static struct option long_options[] = {
+            {"record", no_argument, nullptr, 'r'},
+            {"benchmark", no_argument, nullptr, 'b'},
+            {"device", required_argument, nullptr, 'd'},
+            {"algo", required_argument, nullptr, 'a'},
+            {"num-particles", required_argument, nullptr, 'n'},
+            {"iters", required_argument, nullptr, 'i'},
+            {nullptr, 0, nullptr, 0}};
 
-  int opt;
-  int option_index = 0;
+    int opt;
+    int option_index = 0;
 
-  while ((opt = getopt_long(argc, argv, "rbd:a:n:i:", long_options,
-                            &option_index)) != -1) {
-    switch (opt) {
-    case 'r':
-      record = true;
-      break;
-    case 'b':
-      benchmark = true;
-      break;
-    case 'd':
-      if (strcmp(optarg, "gpu") == 0) {
-        use_gpu = true;
-      } else if (strcmp(optarg, "cpu") == 0) {
-        use_gpu = false;
-      } else {
-        return -1;
-      }
-      break;
-    case 'a':
-      if (strcmp(optarg, "bh") == 0) {
-        use_bh = true;
-      } else if (strcmp(optarg, "naive") == 0) {
-        use_bh = false;
-      } else {
-        fprintf(stderr, "Invalid algorithm option\n");
-        return -1;
-      }
-      break;
-    case 'n':
-      N = (int)strtod(optarg, nullptr);
-      break;
-    case 'i':
-      iters = (int)strtod(optarg, nullptr);
-      break;
-    default:
-      break;
+    while ((opt = getopt_long(argc, argv, "rbd:a:n:i:", long_options,
+                              &option_index)) != -1) {
+        switch (opt) {
+            case 'r':
+                record = true;
+                break;
+            case 'b':
+                benchmark = true;
+                break;
+            case 'd':
+                if (strcmp(optarg, "gpu") == 0) {
+                    use_gpu = true;
+                } else if (strcmp(optarg, "cpu") == 0) {
+                    use_gpu = false;
+                } else {
+                    return -1;
+                }
+                break;
+            case 'a':
+                if (strcmp(optarg, "bh") == 0) {
+                    use_bh = true;
+                } else if (strcmp(optarg, "naive") == 0) {
+                    use_bh = false;
+                } else {
+                    fprintf(stderr, "Invalid algorithm option\n");
+                    return -1;
+                }
+                break;
+            case 'n':
+                N = (int)strtod(optarg, nullptr);
+                break;
+            case 'i':
+                iters = (int)strtod(optarg, nullptr);
+                break;
+            default:
+                break;
+        }
     }
-  }
 
-  Benchmark::getInstance().enableBenchmarking(benchmark);
+    Benchmark::getInstance().enableBenchmarking(benchmark);
 #ifndef CUDA_FOUND
-  if (use_gpu) {
-    fprintf(stderr, "CUDA not found, falling back to CPU\n");
-    use_gpu = false;
-  }
+    if (use_gpu) {
+        fprintf(stderr, "CUDA not found, falling back to CPU\n");
+        use_gpu = false;
+    }
 #endif
 
-  bodies = (body_t *)calloc(N, sizeof(body_t));
+    bodies = (body_t *)calloc(N, sizeof(body_t));
 
-  // Initialize everything
-  init_graphics(N, bodies);
-  { populate(bodies, N); }
+    // Initialize everything
+    init_graphics(N, bodies);
+    { populate(bodies, N); }
 #ifdef CUDA_FOUND
-  gpu_pin_mem(N, bodies);
+    gpu_pin_mem(N, bodies);
   gpu_setup(N, bodies);
 #endif
 
-  /*
-        // start ffmpeg telling it to expect raw rgba 720p-60hz frames
-        // -i - tells it to read frames from stdin
-        const char* cmd = "ffmpeg -r 60 -f rawvideo -pix_fmt rgba -s 2560x1440-i
-     - "
-                          "-threads 0 -preset fast -y -pix_fmt yuv420p -crf 21
-     -vf vflip output.mp4";
+    /*
+          // start ffmpeg telling it to expect raw rgba 720p-60hz frames
+          // -i - tells it to read frames from stdin
+          const char* cmd = "ffmpeg -r 60 -f rawvideo -pix_fmt rgba -s 2560x1440-i
+       - "
+                            "-threads 0 -preset fast -y -pix_fmt yuv420p -crf 21
+       -vf vflip output.mp4";
 
-        // open pipe to ffmpeg's stdin in binary write mode
-        FILE* ffmpeg = popen(cmd, "w");
-        if (!ffmpeg) {
-            fprintf(stderr, "Could not open pipe to ffmpeg\n");
-            return -1;
+          // open pipe to ffmpeg's stdin in binary write mode
+          FILE* ffmpeg = popen(cmd, "w");
+          if (!ffmpeg) {
+              fprintf(stderr, "Could not open pipe to ffmpeg\n");
+              return -1;
+          }
+    */
+
+    float zoom = 0.2;
+    std::signal(SIGINT, signalHandler);
+    int current_iter = 0;
+    while (!glfwWindowShouldClose(window) && !close_window) {
+        double start_time = glfwGetTime();
+        glfwPollEvents();
+
+        // scroll wheel or +/- keys
+        if (glfwGetKey(window, GLFW_KEY_KP_ADD) == GLFW_PRESS ||
+            glfwGetKey(window, GLFW_KEY_EQUAL) == GLFW_PRESS) {
+            zoom *= 1.1; // Zoom in
+        } else if (glfwGetKey(window, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS ||
+                   glfwGetKey(window, GLFW_KEY_MINUS) == GLFW_PRESS) {
+            zoom /= 1.1; // Zoom out
         }
-  */
 
-  float zoom = 0.2;
-  std::signal(SIGINT, signalHandler);
-  int current_iter = 0;
-  while (!glfwWindowShouldClose(window) && !close_window) {
-    double start_time = glfwGetTime();
-    glfwPollEvents();
+        if (use_bh) { // BARNES HUT BODY UPDATES
+            octree_free(&octree);
+            double current_time = start_time;
+            // find min/max of positions
+            float3 min = {INFINITY, INFINITY, INFINITY};
+            float3 max = {-INFINITY, -INFINITY, -INFINITY};
+            for (int i = 0; i < N; i++) {
+                min.x = fminf(min.x, bodies[i].position.x);
+                min.y = fminf(min.y, bodies[i].position.y);
+                min.z = fminf(min.z, bodies[i].position.z);
+                max.x = fmaxf(max.x, bodies[i].position.x);
+                max.y = fmaxf(max.y, bodies[i].position.y);
+                max.z = fmaxf(max.z, bodies[i].position.z);
+            }
+            float3 center = {(min.x + max.x) / 2, (min.y + max.y) / 2,
+                             (min.z + max.z) / 2};
+            // create octree
+            BENCHMARK_START("OctreeInit");
+            octree_init(&octree, center,
+                        fmaxf(max.x - min.x, fmaxf(max.y - min.y, max.z - min.z)), N);
+            BENCHMARK_STOP("OctreeInit");
 
-    // scroll wheel or +/- keys
-    if (glfwGetKey(window, GLFW_KEY_KP_ADD) == GLFW_PRESS ||
-        glfwGetKey(window, GLFW_KEY_EQUAL) == GLFW_PRESS) {
-      zoom *= 1.1; // Zoom in
-    } else if (glfwGetKey(window, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS ||
-               glfwGetKey(window, GLFW_KEY_MINUS) == GLFW_PRESS) {
-      zoom /= 1.1; // Zoom out
-    }
+            BENCHMARK_START("OctreeBuild");
+            octree_build(&octree, bodies, N);
+            BENCHMARK_STOP("OctreeBuild");
 
-    if (use_bh) { // BARNES HUT BODY UPDATES
-      octree_free(&octree);
-      double current_time = start_time;
-      // find min/max of positions
-      float3 min = {INFINITY, INFINITY, INFINITY};
-      float3 max = {-INFINITY, -INFINITY, -INFINITY};
-      for (int i = 0; i < N; i++) {
-        min.x = fminf(min.x, bodies[i].position.x);
-        min.y = fminf(min.y, bodies[i].position.y);
-        min.z = fminf(min.z, bodies[i].position.z);
-        max.x = fmaxf(max.x, bodies[i].position.x);
-        max.y = fmaxf(max.y, bodies[i].position.y);
-        max.z = fmaxf(max.z, bodies[i].position.z);
-      }
-      float3 center = {(min.x + max.x) / 2, (min.y + max.y) / 2,
-                       (min.z + max.z) / 2};
-      // create octree
-      BENCHMARK_START("OctreeInit");
-      octree_init(&octree, center,
-                  fmaxf(max.x - min.x, fmaxf(max.y - min.y, max.z - min.z)), N);
-      BENCHMARK_STOP("OctreeInit");
-
-      BENCHMARK_START("OctreeBuild");
-      octree_build(&octree, bodies, N);
-      BENCHMARK_STOP("OctreeBuild");
-
-      BENCHMARK_START("OctreeProxies");
-      octree_calculate_proxies(&octree, ROOT);
-      BENCHMARK_STOP("OctreeProxies");
+            BENCHMARK_START("OctreeProxies");
+            octree_calculate_proxies(&octree, ROOT);
+            BENCHMARK_STOP("OctreeProxies");
 
 #ifdef CUDA_FOUND
-      if (use_gpu) {
+            if (use_gpu) {
         gpu_update_bh(N, bodies, &octree);
       }
 #endif
-      if (!use_gpu) {
-        BENCHMARK_START("UpdateBH_CPU");
-        cpu_update_bh(N, bodies, &octree);
-        BENCHMARK_STOP("UpdateBH_CPU");
-      }
-    } else { // NAIVE BODY UPDATES
+            if (!use_gpu) {
+                BENCHMARK_START("UpdateBH_CPU");
+                cpu_update_bh(N, bodies, &octree);
+                BENCHMARK_STOP("UpdateBH_CPU");
+            }
+        } else { // NAIVE BODY UPDATES
 #ifdef CUDA_FOUND
-      if (use_gpu) {
+            if (use_gpu) {
         gpu_update_naive(N, bodies);
       }
 #endif
-      if (!use_gpu) {
-        BENCHMARK_START("UpdateNaive_CPU");
-        cpu_update_naive(N, bodies);
-        BENCHMARK_STOP("UpdateNaive_CPU");
-      }
+            if (!use_gpu) {
+                BENCHMARK_START("UpdateNaive_CPU");
+                cpu_update_naive(N, bodies);
+                BENCHMARK_STOP("UpdateNaive_CPU");
+            }
+        }
+        // time it
+        float frame_time = glfwGetTime() - start_time;
+        draw(bodies, N, frame_time, zoom);
+
+        if (close_window ||
+            current_iter >= iters - 1) { // needed because we catch ctrl-c signal
+            glfwSetWindowShouldClose(window, GLFW_TRUE);
+            break;
+        }
+        current_iter++;
     }
-    // time it
-    float frame_time = glfwGetTime() - start_time;
-    draw(bodies, N, frame_time, zoom);
 
-    if (close_window ||
-        current_iter >= iters - 1) { // needed because we catch ctrl-c signal
-      glfwSetWindowShouldClose(window, GLFW_TRUE);
-      break;
-    }
-    current_iter++;
-  }
+    // pclose(ffmpeg);
 
-  // pclose(ffmpeg);
-
-  // CLEANUP
-  cleanup_graphics(bodies);
+    // CLEANUP
+    cleanup_graphics(bodies);
 #ifdef CUDA_FOUND
-  if (use_gpu) {
+    if (use_gpu) {
     if (use_bh) {
       gpu_cleanup_bh(bodies);
     } else {
@@ -243,6 +243,6 @@ int main(int argc, char **argv) {
 
     std::ostringstream filename;
     filename << "benchmarks/benchmark_results_N" << N << "_BH" << (int)use_bh << "_GPU" << (int)use_gpu <<".csv";
-  Benchmark::getInstance().saveResults(filename.str());
-  return 0;
+    Benchmark::getInstance().saveResults(filename.str());
+    return 0;
 }
