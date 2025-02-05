@@ -1,15 +1,16 @@
 
 <p align="center">
-  <img src="https://github.com/benni012/nbody/tree/main/imgs/example.png" />
+  <img src="https://raw.githubusercontent.com/benni012/nbody/refs/heads/main/imgs/example.png" />
 </p>
 
 
 # GPU Accelerated n-body system
 
-3D nbody simulation using the Naive or Barnes-Hut approximation algorithm.
-A 2D projection of the bodies is rendered _realtime_ with imgui.
-If a NVIDIA graphics card is avilable the computations can be parallelized increasing frame performance significantly.
+3D nbody simulation using the Naive or Barnes-Hut approximation algorithm on CPU or Nvidia GPU.
+A 2D projection of the bodies is rendered _realtime_ with [imgui](https://github.com/ocornut/imgui), [OpenGL](https://www.opengl.org/) and [GLFW](https://www.glfw.org/).
+The CPU version also relies on [OpenMP](https://www.openmp.org/).
 
+If a NVIDIA graphics card and CUDA is avilable the computations can be parallelized increasing frame performance significantly.
 ## Running Instructions
 ```
 git clone https://github.com/benni012/nbody
@@ -30,12 +31,12 @@ For example 1k particles with the Barnes-Hut algorrithm on the GPU running for 1
 A detailed explanation of the available arguments
 | Option            | Flag       | Argument Type | Description                                      |
 |------------------|-----------|--------------|--------------------------------------------------|
-<!-- | `--record`       | `-r`       | None         | Enables recording mode.                         | -->
 | `--benchmark`    | `-b`       | None         | Runs in benchmark mode.                         |
 | `--device`       | `-d`       | `cpu/gpu`    | Specifies whether to use CPU or GPU.            |
 | `--algo`         | `-a`       | `bh/naive`   | Selects the algorithm (`bh` for Barnes-Hut, `naive` for direct). |
 | `--num-particles`| `-n`       | Number       | Sets the number of particles.                   |
 | `--iters`        | `-i`       | Number       | Defines the number of iterations.               |
+<!-- | `--record`       | `-r`       | None         | Enables recording mode.                         | -->
 
 Benchmark option outputs (and saves to a csv) the average function times, for example:
 ```
