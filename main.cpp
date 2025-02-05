@@ -29,7 +29,6 @@ body_t *bodies;
 
 std::atomic<bool> close_window(false);
 
-bool record = false;
 bool use_gpu = false;
 bool use_bh = false;
 bool benchmark = false;
@@ -55,14 +54,12 @@ void signalHandler(int signum) {
 
 int main(int argc, char **argv) {
   // flags:
-  // --record
   // --benchmark
   // --device=[cpu/gpu]
   // --algo=[bh/naive]
   // --num-particles [number of particles]
 
   static struct option long_options[] = {
-      {"record", no_argument, nullptr, 'r'},
       {"benchmark", no_argument, nullptr, 'b'},
       {"device", required_argument, nullptr, 'd'},
       {"algo", required_argument, nullptr, 'a'},
@@ -76,9 +73,6 @@ int main(int argc, char **argv) {
   while ((opt = getopt_long(argc, argv, "rbd:a:n:i:", long_options,
                             &option_index)) != -1) {
     switch (opt) {
-    case 'r':
-      record = true;
-      break;
     case 'b':
       benchmark = true;
       break;
