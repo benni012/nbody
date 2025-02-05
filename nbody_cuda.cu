@@ -79,7 +79,7 @@ __global__ void bh_kernel(body_t *bodies, octree_t *__restrict octree) {
 
   int node = ROOT;
   float3 acceleration = {0, 0, 0};
-  __const__ float4 position = bodies[particle_idx].position;
+  float4 position = bodies[particle_idx].position;
 
   node_t n;
   while (true) {
@@ -94,7 +94,7 @@ __global__ void bh_kernel(body_t *bodies, octree_t *__restrict octree) {
     float dz = n.center_of_mass.z - position.z;
     float d_sq = dx * dx + dy * dy + dz * dz + eps_sq;
 
-    if (4 * n.box.half_extent * n.box.half_extent < theta_sq * d_sq) {
+    if (4 * n.box.half_extent * n.box.half_extent < theta_sq * d_sq) { // far enough to use approx
       float inv_d = rsqrtf(d_sq);
       float acc = G * n.center_of_mass.w * inv_d * inv_d * inv_d;
 
