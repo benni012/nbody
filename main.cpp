@@ -33,6 +33,7 @@ std::atomic<bool> close_window(false);
 bool use_gpu = false;
 bool use_bh = false;
 bool benchmark = false;
+int population_method = 3; // Plummers
 int N = 5000;
 unsigned int iters = UINT_MAX;
 
@@ -59,6 +60,7 @@ int main(int argc, char **argv) {
     // --device=[cpu/gpu]
     // --algo=[bh/naive]
     // --num-particles [number of particles]
+    // --population [population method]
 
     static struct option long_options[] = {
         {"benchmark", no_argument, nullptr, 'b'},
@@ -66,12 +68,13 @@ int main(int argc, char **argv) {
         {"algo", required_argument, nullptr, 'a'},
         {"num-particles", required_argument, nullptr, 'n'},
         {"iters", required_argument, nullptr, 'i'},
+        {"pop-method", required_argument, nullptr, 'p'},
         {nullptr, 0, nullptr, 0}};
 
     int opt;
     int option_index = 0;
 
-    while ((opt = getopt_long(argc, argv, "bd:a:n:i:", long_options,
+    while ((opt = getopt_long(argc, argv, "bd:a:n:i:p:", long_options,
                               &option_index)) != -1) {
         switch (opt) {
         case 'b':
@@ -102,6 +105,13 @@ int main(int argc, char **argv) {
         case 'i':
             iters = (int)strtod(optarg, nullptr);
             break;
+        case 'p':
+            population_method = (int)strtod(optarg, nullptr);
+            if (population_method > 3){
+                fprintf(stderr, "Invalid population-method choice\n");
+                return -1;
+            }
+            break;
         default:
             break;
         }
@@ -119,14 +129,13 @@ int main(int argc, char **argv) {
 
     // Initialize everything
     init_graphics(N, bodies);
-    {
-        populate(bodies, N);
-    }
+    float zoom = populate(bodies, N, population_method);
 #ifdef CUDA_FOUND
     gpu_pin_mem(N, bodies);
     gpu_setup(N, bodies);
     // if (use_bh) {
-    //     gpu_setup_bh(N, bodies, &octree);
+        // octree_init(&octree, {0, 0, 0}, 1.0, N);
+        // gpu_setup_bh(N, bodies, &octree);
     // }
 #endif
 
@@ -147,7 +156,6 @@ int main(int argc, char **argv) {
           }
     */
 
-    float zoom = 0.2;
     std::signal(SIGINT, signalHandler);
     int current_iter = 0;
     while (!glfwWindowShouldClose(window) && !close_window) {
@@ -220,9 +228,8 @@ int main(int argc, char **argv) {
         float frame_time = glfwGetTime() - start_time;
         draw(bodies, N, frame_time, zoom);
 
-        if (close_window ||
-            current_iter >=
-                iters - 1) { // needed because we catch ctrl-c signal
+        // needed because we catch ctrl-c signal
+        if (close_window || current_iter >= iters - 1) { 
             glfwSetWindowShouldClose(window, GLFW_TRUE);
             break;
         }

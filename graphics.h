@@ -16,21 +16,16 @@
 
 extern octree_t octree;
 
-void cleanupImGui() {
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
-}
 
-GLFWwindow *window = nullptr;
-GLuint shaderProgram = 0;
-GLuint vao, vbo;
-int width = 720;
-int height = 720;
-float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
+static GLFWwindow *window = nullptr;
+static GLuint shaderProgram = 0;
+static GLuint vao, vbo;
+static int width = 720;
+static int height = 720;
+static float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
 
 // Function to compile shader
-GLuint compileShader(GLenum type, const char *source) {
+static GLuint compileShader(GLenum type, const char *source) {
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, nullptr);
     glCompileShader(shader);
@@ -46,7 +41,7 @@ GLuint compileShader(GLenum type, const char *source) {
 }
 
 // Function to create shader program
-GLuint createShaderProgram(const char *vertexSource,
+static GLuint createShaderProgram(const char *vertexSource,
                            const char *fragmentSource) {
     GLuint vertexShader = compileShader(GL_VERTEX_SHADER, vertexSource);
     GLuint fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
@@ -71,7 +66,7 @@ GLuint createShaderProgram(const char *vertexSource,
 }
 
 // shader to draw points
-const char *vertexShaderSource = R"(
+static const char *vertexShaderSource = R"(
 #version 150 core
 uniform float zoom;
 in vec3 position;
@@ -83,7 +78,7 @@ void main() {
 }
 )";
 
-const char *fragmentShaderSource = R"(
+static const char *fragmentShaderSource = R"(
     #version 150 core
     uniform int pointCount;
     out vec4 FragColor;
@@ -95,7 +90,7 @@ const char *fragmentShaderSource = R"(
     }
 )";
 
-void setup_ImGui() {
+static void setup_ImGui() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
@@ -115,7 +110,7 @@ void setup_ImGui() {
     io.Fonts->AddFontDefault(&fontConfig);
 }
 
-void octree_draw(octree_t *octree, int idx, int depth = 0) {
+static void octree_draw(octree_t *octree, int idx, int depth = 0) {
     //    return;
     const int draw_depth = 1;
     int children = octree->nodes[idx].children;
@@ -156,7 +151,7 @@ void octree_draw(octree_t *octree, int idx, int depth = 0) {
     }
 }
 
-void init_graphics(int N, body_t *bodies) {
+static void init_graphics(int N, body_t *bodies) {
     if (!glfwInit())
         exit(-1);
 
@@ -206,7 +201,7 @@ void init_graphics(int N, body_t *bodies) {
     glBindVertexArray(0);
 }
 
-void draw(body_t *bodies, int N, float frameTime, float zoom) {
+static void draw(body_t *bodies, int N, float frameTime, float zoom) {
     glfwPollEvents();
 
     double currentTime = glfwGetTime();
@@ -264,7 +259,13 @@ void draw(body_t *bodies, int N, float frameTime, float zoom) {
     glfwSwapBuffers(window);
 }
 
-void cleanup_graphics(body_t *bodies) {
+static void cleanupImGui() {
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+}
+
+static void cleanup_graphics(body_t *bodies) {
     cleanupImGui();
     free(bodies);
     glDeleteVertexArrays(1, &vao);
@@ -274,242 +275,113 @@ void cleanup_graphics(body_t *bodies) {
     glfwTerminate();
 }
 
-// void populate(body_t *bodies, int N) {
-//     // Initialize positions, velocities, and masses
-//     std::default_random_engine generator(42);
-//     std::normal_distribution<float> distribution(0.0, 100.0);
-//     for (int i = 0; i < N; i++) {
-//         float curve = 2 * 3.14159 * (rand() / float(RAND_MAX));
-//         float radius = .5 * (rand() / float(RAND_MAX));
-//         float x = cos(curve) - sin(curve);
-//         float y = cos(curve) + sin(curve);
-//         float vel = sqrt(6.67e-11 * N * 200 / radius) * 0.05;
-//         bodies[i].position.w = 7.;
-//         bodies[i].position.x = radius * x;
-//         bodies[i].position.y = radius * y;
-//         bodies[i].position.z = 0.02 * ((rand() / float(RAND_MAX)) - 0.5);
-////        bodies[i].position.z = 0;
-//
-//        bodies[i].velocity.x = -y * vel;
-//        bodies[i].velocity.y = x * vel;
-//        bodies[i].velocity.z = 0.0;
-//    }
-//}
+static float populate(body_t *bodies, int N, int method) {
+    std::default_random_engine generator(42);
+    std::uniform_real_distribution<float> uniform_dist(0.0f, 1.0f);
+    std::normal_distribution<float> normal_dist(0.0f, 100.0f);
+    std::random_device rd;
+    std::mt19937 gen(rd());
 
-// void populate(body_t *bodies, int N) {
-//     std::default_random_engine generator(42);
-//     std::uniform_real_distribution<float> distribution(0.0, 1.0);
-//
-//     float inner_radius = 25.0f;
-//     float outer_radius = std::sqrt(static_cast<float>(N)) * 5.0f;
-//
-//     float center_mass = 1e6;
-//
-////    bodies[0].position = Vec3(0, 0, 0, inner_radius);
-////    bodies[0].velocity = Vec3(0, 0, 0);
-//    bodies[0].position = {0, 0, 0, inner_radius};
-//    bodies[0].velocity = {0, 0, 0};
-//
-//    for (int i = 1; i < N; ++i) {
-//        float angle = distribution(generator) * 2.0f * M_PI;
-//        float sin_a = std::sin(angle);
-//        float cos_a = std::cos(angle);
-//
-//        float t = inner_radius / outer_radius;
-//        float r = std::sqrt(t * t + (1.0f - t * t) * distribution(generator));
-//        float radius = outer_radius * r;
-//
-//        float x = radius * cos_a;
-//        float y = radius * sin_a;
-//        float z = 0.02f * (distribution(generator) - 0.5f);
-//
-////        bodies[i].position = Vec3(x, y, z, 1.0f);
-//        bodies[i].position = {x, y, z, 1.0f};
-//        const auto zoom = 5e-4f;
-//        bodies[i].position.x *= zoom;
-//        bodies[i].position.y *= zoom;
-//        bodies[i].position.z *= zoom;
-//
-//        float velocity_mag = std::sqrt(6.67e-11f * center_mass / radius) *
-//        0.05f;
-////        bodies[i].velocity = Vec3(-y * velocity_mag, x * velocity_mag,
-///0.0f);
-//        bodies[i].velocity = {-y * velocity_mag, x * velocity_mag, 0.0f};
-//        bodies[i].velocity.x *= zoom;
-//        bodies[i].velocity.y *= zoom;
-//    }
+    if (method == 0) {  
+        // Circular disk method
+        for (int i = 0; i < N; i++) {
+            float angle = 2 * M_PI * (rand() / float(RAND_MAX));
+            float radius = 0.5 * (rand() / float(RAND_MAX));
+            float x = cos(angle) - sin(angle);
+            float y = cos(angle) + sin(angle);
+            float vel = sqrt(6.67e-11 * N * 200 / radius) * 0.05;
+            bodies[i].position = {radius * x, radius * y, static_cast<float>(0.02 * ((rand() / float(RAND_MAX)) - 0.5)), .01f};
+            bodies[i].velocity = {-y * vel, x * vel, 0.0f};
+        }
+        return 1;
+    } else if (method == 1) {  
+        // Uniform disk with central mass
+        float inner_radius = 25.0f;
+        float outer_radius = std::sqrt(static_cast<float>(N)) * 5.0f;
+        float center_mass = 1e6;
 
-// void populate(body_t *bodies, int N) {
-//     // Initialize positions, velocities, and masses
-//     std::default_random_engine generator(42);
-//     std::normal_distribution<float> distribution(0.0, 100.0);
-//
-//     bodies[0].position = {0, 0, 0, 1.e6f};
-//     bodies[0].velocity = {0, 0, 0};
-//
-//     for (int i = 1; i < N; i++) {
-//         float curve = 2 * 3.14159 * (rand() / float(RAND_MAX));
-//         float radius = .5 * sqrt((rand() / float(RAND_MAX)));
-//         float x = cos(curve) - sin(curve);
-//         float y = cos(curve) + sin(curve);
-//         float vel = cbrt(6.67e-11 * N * 100 / radius) * 0.067;
-//         bodies[i].position.w = 1.;
-//         bodies[i].position.x = radius * x;
-//         bodies[i].position.y = radius * y;
-//         bodies[i].position.z = 0.02 * ((rand() / float(RAND_MAX)) - 0.5);
-////        bodies[i].position.z = 0;
-//
-//        bodies[i].velocity.x = -y * vel;
-//        bodies[i].velocity.y = x * vel;
-//        bodies[i].velocity.z = 0.0;
-//    }
-//}
+        bodies[0].position = {0, 0, 0, center_mass};
+        bodies[0].velocity = {0, 0, 0};
 
-// void populate(body_t *bodies, int N) {
-//  pub fn uniform_disc(n: usize) -> Vec<Body> {
-//     fastrand::seed(0);
-//     let inner_radius = 25.0;
-//     let outer_radius = (n as f32).sqrt() * 5.0;
-//
-//     let mut bodies: Vec<Body> = Vec::with_capacity(n);
-//
-//     let m = 1e6;
-//     let center = Body::new(Vec2::zero(), Vec2::zero(), m as f32,
-//     inner_radius); bodies.push(center);
-//
-//     while bodies.len() < n {
-//         let a = fastrand::f32() * std::f32::consts::TAU;
-//         let (sin, cos) = a.sin_cos();
-//         let t = inner_radius / outer_radius;
-//         let r = fastrand::f32() * (1.0 - t * t) + t * t;
-//         let pos = Vec2::new(cos, sin) * outer_radius * r.sqrt();
-//         let vel = Vec2::new(sin, -cos);
-//         let mass = 1.0f32;
-//         let radius = mass.cbrt();
-//
-//         bodies.push(Body::new(pos, vel, mass, radius));
-//     }
-//
-//     bodies.sort_by(|a, b| a.pos.mag_sq().total_cmp(&b.pos.mag_sq()));
-//     let mut mass = 0.0;
-//     for i in 0..n {
-//         mass += bodies[i].mass;
-//         if bodies[i].pos == Vec2::zero() {
-//             continue;
-//         }
-//
-//         let v = (mass / bodies[i].pos.mag()).sqrt();
-//         bodies[i].vel *= v;
-//     }
-//
-//     bodies
-// }
-//  cpp version of this rust code
-//     std::default_random_engine generator(42);
-//     std::uniform_real_distribution<float> distribution(0.0, 1.0);
-//
-//     float inner_radius = 25.0f;
-//     float outer_radius = std::sqrt(static_cast<float>(N)) * 5.0f;
-//
-//     float center_mass = 1e6;
-//
-//     bodies[0].position = {0, 0, 0, center_mass};
-//     bodies[0].velocity = {0, 0, 0};
-//
-//     for (int i = 1; i < N; i++) {
-//         auto a = distribution(generator) * 2.0f * M_PI;
-//         auto sin_a = (float)std::sin(a);
-//         auto cos_a = (float)std::cos(a);
-//         auto t = inner_radius / outer_radius;
-//         auto r = distribution(generator) * (1.0f - t * t) + t * t;
-//         auto tmp = outer_radius * std::sqrt(r);
-//         bodies[i].position = {cos_a * tmp, sin_a * tmp, 0, 1.0f};
-//         bodies[i].velocity = {sin_a, -cos_a, 0};
-//     }
-//
-//     // sort
-//     std::sort(bodies, bodies + N, [](const body_t &a, const body_t &b) {
-//         return a.position.x * a.position.x + a.position.y * a.position.y <
-//         b.position.x * b.position.x + b.position.y * b.position.y;
-//     });
-//
-//     float mass = 0.0f;
-//
-//     for (int i = 0; i < N; i++) {
-//         mass += bodies[i].position.w;
-//         if (bodies[i].position.x == 0 && bodies[i].position.y == 0) {
-//             continue;
-//         }
-//         float v = std::sqrt(mass / std::sqrt(bodies[i].position.x *
-//         bodies[i].position.x + bodies[i].position.y * bodies[i].position.y));
-//         bodies[i].velocity.x *= v;
-//         bodies[i].velocity.y *= v;
-//     }
-//
-//
-//
-//     // scale
-////    const auto zoom = 1.7e3f / outer_radius;
-//    const auto zoom = 1.7e2f / outer_radius;
-//    for (int i = 0; i < N; i++) {
-//        bodies[i].position.x *= zoom * 3e-4f;
-//        bodies[i].position.y *= zoom * 3e-4f;
-//        bodies[i].position.z *= zoom * 3e-4f;
-//        bodies[i].velocity.x *= zoom * 3e-4f;
-//        bodies[i].velocity.y *= zoom * 3e-4f;
-//        bodies[i].position.w *= zoom*zoom*zoom;
-//    }
-//
-//
-//}
+        for (int i = 1; i < N; ++i) {
+            float angle = uniform_dist(generator) * 2.0f * M_PI;
+            float sin_a = std::sin(angle);
+            float cos_a = std::cos(angle);
+            float t = inner_radius / outer_radius;
+            float r = std::sqrt(t * t + (1.0f - t * t) * uniform_dist(generator));
+            float radius = outer_radius * r;
+            bodies[i].position = {radius * cos_a, radius * sin_a, 0.02f * (uniform_dist(generator) - 0.5f), 1.0f};
+            float velocity_mag = std::sqrt(6.67e-11f * center_mass / radius) * 0.05f;
+            bodies[i].velocity = {-sin_a * velocity_mag, cos_a * velocity_mag, 0.0f};
+        }
+        return 0.004;
+    } else if (method == 2) {  
+        // Modified uniform disk
+        float inner_radius = 25.0f;
+        float outer_radius = std::sqrt(static_cast<float>(N)) * 5.0f;
+        float center_mass = 1e6;
 
-//    vel = x*sqrt(2.0)*(1.0+r(i)*r(i))**(-0.25)
-//    theta = acos(rand(-1.0,1.0))
-//    phi = rand(0.0, 2.0*pi)
-//    vx(i) = vel*sin(theta)*cos(phi)
-//    vy(i) = vel*sin(theta)*sin(phi)
-//    vz(i) = vel*cos(theta)
+        bodies[0].position = {0, 0, 0, center_mass};
+        bodies[0].velocity = {0, 0, 0};
 
-// Function to sample the Plummer distribution
-void populate(body_t *bodies, int N) {
-    std::random_device rd; // Random device to get a seed for the Mersenne Twister
-    std::mt19937 gen(
-            rd()); // Mersenne Twister generator, seeded with random_device
-    std::uniform_real_distribution<float> dist(
-            0.0f, 1.0f); // Uniform distribution in [0, 1]
+        for (int i = 1; i < N; i++) {
+            float angle = uniform_dist(generator) * 2.0f * M_PI;
+            float sin_a = std::sin(angle);
+            float cos_a = std::cos(angle);
+            float t = inner_radius / outer_radius;
+            float r = uniform_dist(generator) * (1.0f - t * t) + t * t;
+            float radius = outer_radius * std::sqrt(r);
+            bodies[i].position = {cos_a * radius, sin_a * radius, 0, 1.0f};
+            bodies[i].velocity = {sin_a, -cos_a, 0};
+        }
 
-    for (int i = 0; i < N; ++i) {
-        float x1 = dist(gen);
-        float r = pow(pow(x1, -2.0f / 3.0f) - 1.0f, -0.5f);
-        float x2 = dist(gen);
-        float x3 = dist(gen);
-        float z = r * (1 - 2 * x2);
-        float x = sqrt(r * r - z * z) * cos(2 * M_PI * x3);
-        float y = sqrt(r * r - z * z) * sin(2 * M_PI * x3);
+        std::sort(bodies, bodies + N, [](const body_t &a, const body_t &b) {
+            return a.position.x * a.position.x + a.position.y * a.position.y <
+                   b.position.x * b.position.x + b.position.y * b.position.y;
+        });
 
-        // von-neumann-rejection for q 0.1x4 < g(x5)
-        // g(q) = q^2(1-q^2)^3.5
-        float q = 0;
-        float x4;
-        do {
-            x4 = dist(gen);
-            q = dist(gen);
-        } while (0.1 * x4 >= q * q * pow(1 - q * q, 3.5));
+        float mass = 0.0f;
+        for (int i = 0; i < N; i++) {
+            mass += bodies[i].position.w;
+            if (bodies[i].position.x == 0 && bodies[i].position.y == 0) {
+                continue;
+            }
+            float v = std::sqrt(mass / std::sqrt(bodies[i].position.x * bodies[i].position.x +
+                                                 bodies[i].position.y * bodies[i].position.y));
+            bodies[i].velocity.x *= v;
+            bodies[i].velocity.y *= v;
+        }
+        return 0.004;
+    } else if (method == 3) {  
+        // Plummer distribution
+        for (int i = 0; i < N; ++i) {
+            float x1 = uniform_dist(gen);
+            float r = pow(pow(x1, -2.0f / 3.0f) - 1.0f, -0.5f);
+            float x2 = uniform_dist(gen);
+            float x3 = uniform_dist(gen);
+            float z = r * (1 - 2 * x2);
+            float x = sqrt(r * r - z * z) * cos(2 * M_PI * x3);
+            float y = sqrt(r * r - z * z) * sin(2 * M_PI * x3);
 
-        float V = q * sqrt(2) * pow(1 + r * r, -0.25);
+            float q, x4;
+            do {
+                x4 = uniform_dist(gen);
+                q = uniform_dist(gen);
+            } while (0.1 * x4 >= q * q * pow(1 - q * q, 3.5));
 
-        float x6 = dist(gen);
-        float x7 = dist(gen);
-        float w = (1 - 2 * x6) * V;
-        float u = sqrt(V * V - w * w) * cos(2 * M_PI * x7);
-        float v = sqrt(V * V - w * w) * sin(2 * M_PI * x7);
+            float V = q * sqrt(2) * pow(1 + r * r, -0.25);
+            float x6 = uniform_dist(gen);
+            float x7 = uniform_dist(gen);
+            float w = (1 - 2 * x6) * V;
+            float u = sqrt(V * V - w * w) * cos(2 * M_PI * x7);
+            float v = sqrt(V * V - w * w) * sin(2 * M_PI * x7);
 
-        bodies[i].position = {x, y, z, 1.0f / N};
-        bodies[i].velocity = {u, v, w};
-
-        // print r and V to plot the distribution (csv)
-        //        printf("%f,%f\n", r, V);
+            bodies[i].position = {x, y, z, 1.0f / N};
+            bodies[i].velocity = {u, v, w};
+        }
+        return 0.2;
+    } else {
+        return -1;
     }
 }
-
 #endif // NBODY_GRAPHICS_H

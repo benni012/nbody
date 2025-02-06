@@ -1,6 +1,11 @@
 #ifndef NBODY_STRUCTURES_H
 #define NBODY_STRUCTURES_H
 
+#include <iostream>
+#include <random>
+#include <algorithm>
+#include <cmath>
+
 #ifdef CUDA_FOUND
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -40,5 +45,6 @@ struct alignas(32) octree_t {
     int num_nodes;
     int max_nodes;
 };
+
 
 #endif // NBODY_STRUCTURES_H

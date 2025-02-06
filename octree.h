@@ -14,7 +14,7 @@
  * @param half_extent Half extent of the octree
  * @param max_nodes Maximum number of nodes in the octree
  */
-void octree_init(octree_t *octree, float3 center, float half_extent, int max_nodes) {
+static void octree_init(octree_t *octree, float3 center, float half_extent, int max_nodes) {
     octree->nodes = new node_t[max_nodes];  // Allocate memory for the nodes
     octree->num_nodes = 1;
     octree->max_nodes = max_nodes;
@@ -33,7 +33,7 @@ void octree_init(octree_t *octree, float3 center, float half_extent, int max_nod
  * @param node Index of the node to split
  * @param bodies Array of bodies
  */
-void octree_split(octree_t *octree, int node, body_t *bodies) {
+static void octree_split(octree_t *octree, int node, body_t *bodies) {
     node_t parent = octree->nodes[node];
     float3 center = parent.box.center;
 
@@ -106,7 +106,7 @@ void octree_split(octree_t *octree, int node, body_t *bodies) {
  * @param octree Pointer to the octree
  * @param node Index of the node to calculate the center of mass
  */
-void octree_calculate_proxies(octree_t *octree, int node) {
+static void octree_calculate_proxies(octree_t *octree, int node) {
     if (octree->nodes[node].children == ROOT) {
         return;
     }
@@ -146,7 +146,7 @@ void octree_calculate_proxies(octree_t *octree, int node) {
  * @param bodies Array of bodies
  * @param N Number of bodies
  */
-void octree_build(octree_t *octree, body_t *bodies, int N) {
+static void octree_build(octree_t *octree, body_t *bodies, int N) {
     octree->nodes[ROOT].pos_idx = 0;
     octree->nodes[ROOT].count = N;
 
@@ -179,7 +179,7 @@ void octree_build(octree_t *octree, body_t *bodies, int N) {
  *
  * @param octree Pointer to the octree
  */
-void octree_free(octree_t *octree) {
+static void octree_free(octree_t *octree) {
     if (octree->nodes != nullptr) {
         delete[] octree->nodes;  // Deallocate the memory for nodes
         octree->nodes = nullptr; // Set pointer to nullptr to avoid dangling references

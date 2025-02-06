@@ -29,13 +29,14 @@ For example 1k particles with the Barnes-Hut algorrithm on the GPU running for 1
 ```
 
 A detailed explanation of the available arguments
-| Option            | Flag       | Argument Type | Description                                      |
-|------------------|-----------|--------------|--------------------------------------------------|
-| `--benchmark`    | `-b`       | None         | Runs in benchmark mode.                         |
-| `--device`       | `-d`       | `cpu/gpu`    | Specifies whether to use CPU or GPU.            |
-| `--algo`         | `-a`       | `bh/naive`   | Selects the algorithm (`bh` for Barnes-Hut, `naive` for direct). |
-| `--num-particles`| `-n`       | Number       | Sets the number of particles.                   |
-| `--iters`        | `-i`       | Number       | Defines the number of iterations.               |
+| Option            | Flag       | Argument Type | Description                                   | Default |
+|------------------|-----------|--------------|--------------------------------------------------|------------|
+| `--benchmark`    | `-b`       | None         | Runs in benchmark mode.                         | `false`    |
+| `--device`       | `-d`       | `cpu/gpu`    | Specifies whether to use CPU or GPU.            | `cpu`      |
+| `--algo`         | `-a`       | `bh/naive`   | Selects the algorithm (`bh` for Barnes-Hut, `naive` for direct). | `naive` |
+| `--num-particles`| `-n`       | Number       | Sets the number of particles.                   | `5000`     |
+| `--iters`        | `-i`       | Number       | Defines the number of iterations.               | `UINT_MAX` |
+| `--pop-method`   | `-p`       | Number       | Defines the population method (`0` Uniform Disk, `1`, Uniform disk with central mass, `2` Uniform stable disk with movement, `3` Plummers Model) | `3` |
 <!-- | `--record`       | `-r`       | None         | Enables recording mode.                         | -->
 
 Benchmark option outputs (and saves to a csv) the average function times, for example:
