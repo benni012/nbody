@@ -5,16 +5,15 @@
 #include <stdio.h>
 
 // CUDA error-checking macro
-#define cudaCheckErrors(msg)                                    \
-do {                                                            \
-    cudaError_t __err = cudaGetLastError();                     \
-    if (__err != cudaSuccess) {                                 \
-        fprintf(stderr, "Fatal error: %s (%s at %s:%d)\n", msg, \
-        cudaGetErrorString(__err), __FILE__, __LINE__);         \
-        exit(1);                                                \
-    }                                                           \
-} while (0)
-
+#define cudaCheckErrors(msg)                                                   \
+  do {                                                                         \
+    cudaError_t __err = cudaGetLastError();                                    \
+    if (__err != cudaSuccess) {                                                \
+      fprintf(stderr, "Fatal error: %s (%s at %s:%d)\n", msg,                  \
+              cudaGetErrorString(__err), __FILE__, __LINE__);                  \
+      exit(1);                                                                 \
+    }                                                                          \
+  } while (0)
 
 // Kernel declarations
 __global__ void naive_kernel(int pointCount, body_t *bodies);
@@ -31,7 +30,7 @@ void gpu_update_naive(int N, body_t *bodies);
 void gpu_cleanup_naive(body_t *bodies);
 
 // Barnes Hut
-void gpu_setup_bh(body_t *bodies, octree_t *octree, int N);
+void gpu_setup_bh(int N, body_t *bodies, octree_t *octree);
 void gpu_update_bh(int N, body_t *bodies, octree_t *octree);
 void gpu_cleanup_bh(body_t *bodies);
 #endif // NBODY_NBODY_CUDA_H

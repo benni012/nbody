@@ -8,7 +8,7 @@
 // constant memory
 // mimic main.cpp defaults
 __constant__ float G = 1;
-__constant__ float dt = 0.0011;
+__constant__ float dt = 0.001;
 __constant__ float theta_sq = 1.0f * 1.0f;
 __constant__ float eps_sq = 0.05f * 0.05f;
 
@@ -33,12 +33,13 @@ __global__ void naive_kernel(int pointCount, body_t *bodies) {
 
         if (other_idx >= pointCount)
             return;
+        // Write to shared memory
         shared_pos[threadIdx.x] = bodies[other_idx].position;
 
-        __syncthreads();
+        __syncthreads(); // Wait for other threads
 
 #pragma unroll
-        for (int j = 0; j < BLOCK_SIZE; j++) {
+        for (int j = 0; j < BLOCK_SIZE; j++) { // Iterate shared memory
             if (i + j >= pointCount)
                 break;
 
@@ -84,8 +85,8 @@ __global__ void bh_kernel(body_t *bodies, octree_t *__restrict octree) {
     float4 position = bodies[particle_idx].position;
 
     node_t n;
-    while (true) {
-        if (node < 73) {
+    while (true) {       // iterate tree using .next
+        if (node < 73) { // read node from shared memory if possible
             n = shared_nodes[node];
         } else {
             n = octree->nodes[node];
@@ -111,6 +112,7 @@ __global__ void bh_kernel(body_t *bodies, octree_t *__restrict octree) {
             node = n.next;
         } else if (n.children == ROOT) { // Reached Leaf
             for (int j = n.pos_idx; j < n.pos_idx + n.count; j++) {
+                // interaction with all bodies in leaf
                 float4 other = bodies[j].position;
                 float dx = other.x - position.x;
                 float dy = other.y - position.y;
@@ -128,7 +130,7 @@ __global__ void bh_kernel(body_t *bodies, octree_t *__restrict octree) {
                 break;
             }
             node = n.next;
-        } else { // Keep Iterating
+        } else { // Keep Iterating and go to next child
             if (n.children >= octree->num_nodes) {
                 break;
             }
@@ -151,6 +153,13 @@ __global__ void update_pos_kernel(int pointCount, body_t *bodies) {
     __syncthreads();
 }
 
+/**
+ * @brief Host wrapper to update body positions and transfer the device array to
+ * host
+ *
+ * @param N Number of bodies
+ * @param bodies Array of bodies
+ */
 void gpu_update_position(int N, body_t *bodies) {
     BENCHMARK_START("PosUpdate_GPU");
     update_pos_kernel<<<numBlocks, BLOCK_SIZE>>>(N, d_bodies);
@@ -161,12 +170,25 @@ void gpu_update_position(int N, body_t *bodies) {
     BENCHMARK_START("BodiesD2H");
     cudaMemcpy(bodies, d_bodies, N * sizeof(body_t), cudaMemcpyDeviceToHost);
     BENCHMARK_STOP("BodiesD2H");
+    cudaCheckErrors("COPY Bodies execution failed");
 }
 
+/**
+ * @brief Pins the host body memory for faster transfer times.
+ *
+ * @param N Number of bodies
+ * @param bodies Array of bodies
+ */
 void gpu_pin_mem(int N, body_t *bodies) {
     cudaMallocHost(&bodies, N * sizeof(body_t)); // pin host mem
 }
 
+/**
+ * @brief Allocates the bodies array on device and works out number of blocks
+ *
+ * @param N Number of bodies
+ * @param bodies Array of bodies
+ */
 void gpu_setup(int N, body_t *bodies) {
     // kernel dims
     numBlocks = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
@@ -174,8 +196,15 @@ void gpu_setup(int N, body_t *bodies) {
     // allocate and cpy bodies to device
     cudaMalloc(&d_bodies, N * sizeof(body_t));
     cudaMemcpy(d_bodies, bodies, N * sizeof(body_t), cudaMemcpyHostToDevice);
+    cudaCheckErrors("COPY Init-Bodies execution failed");
 }
 
+/**
+ * @brief Host wrapper for the naive acceleraton update kernel
+ *
+ * @param N Number of bodies
+ * @param bodies Array of bodies
+ */
 void gpu_update_naive(int N, body_t *bodies) {
     BENCHMARK_START("AccUpdateNaive_GPU");
     naive_kernel<<<numBlocks, BLOCK_SIZE>>>(N, d_bodies);
@@ -185,30 +214,53 @@ void gpu_update_naive(int N, body_t *bodies) {
     gpu_update_position(N, bodies);
 }
 
+/**
+ * @brief Cleans up host and device arrays used by the naive algorithm
+ *
+ * @param bodies Array of bodies
+ */
 void gpu_cleanup_naive(body_t *bodies) {
     cudaFree(d_bodies);
     cudaFreeHost(bodies);
 }
 
-void gpu_setup_bh(body_t *bodies, octree_t *octree, int N) {
+/**
+ * @brief Allocates device octree structure and nodes array
+ *
+ * @param N Number of bodies
+ * @param bodies Array of bodies
+ * @param octree Octree structure
+ */
+void gpu_setup_bh(int N, body_t *bodies, octree_t *octree) {
     cudaMalloc(&d_octree, sizeof(octree_t));
     cudaMalloc(&d_nodes, octree->max_nodes * sizeof(node_t));
 
     octree_t h_octree = *octree;
     h_octree.nodes = d_nodes; // Update to device pointer
     cudaMemcpy(d_octree, &h_octree, sizeof(octree_t), cudaMemcpyHostToDevice);
+    cudaCheckErrors("COPY Init-Nodes execution failed");
 }
 
+/**
+ * @brief Copies the nodes to device and functions as
+ *        host wrapper for the barnes-hut acceleraton update kernel
+ *
+ * @param N Number of bodies
+ * @param bodies Array of bodies
+ * @param octree Octree structure
+ */
 void gpu_update_bh(int N, body_t *bodies, octree_t *octree) {
+
     if (!bh_setup) {
-        gpu_setup_bh(bodies, octree, N);
+        gpu_setup_bh(N, bodies, octree);
         bh_setup = true;
     }
-
+    
     BENCHMARK_START("OctreeH2D");
     cudaMemcpy(d_nodes, octree->nodes, octree->max_nodes * sizeof(node_t),
                cudaMemcpyHostToDevice);
     BENCHMARK_STOP("OctreeH2D");
+    cudaCheckErrors("COPY Nodes execution failed");
 
     BENCHMARK_START("AccUpdateBH_GPU");
     bh_kernel<<<numBlocks, BLOCK_SIZE>>>(d_bodies, d_octree);
@@ -219,6 +271,11 @@ void gpu_update_bh(int N, body_t *bodies, octree_t *octree) {
     gpu_update_position(N, bodies);
 }
 
+/**
+ * @brief Cleans up host and device arrays used by the barnes-hut algorithm
+ *
+ * @param bodies Array of bodies
+ */
 void gpu_cleanup_bh(body_t *bodies) {
     cudaFree(d_bodies);
     cudaFreeHost(bodies);
