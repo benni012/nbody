@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/benni012/nbody/refs/heads/main/imgs/example.png" />
+  <img src="https://raw.githubusercontent.com/benni012/nbody/refs/heads/main/imgs/example.png" width="333"/>
 </p>
 
 
