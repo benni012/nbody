@@ -44,9 +44,9 @@ Benchmark option outputs (and saves to a csv) the average function times, for ex
 $ ./nbody -anaive -dgpu -n200 -b -i500
 Timings:
 Function            Calls     Mean Time (us)      Std Dev (us)
-BodiesD2H           116       29                  8                   
-PosUpdate_GPU       116       9                   1                   
-AccUpdateNaive_GPU  116       112                 183                 
+BodiesD2H           500       29                  8                   
+PosUpdate_GPU       500       9                   1                   
+AccUpdateNaive_GPU  500       112                 183                 
 ```
 
 

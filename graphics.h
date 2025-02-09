@@ -341,7 +341,7 @@ static float populate(body_t *bodies, int N, int method) {
             float velocity_mag = std::sqrt(6.67e-11f * center_mass / radius) * 0.05f;
             bodies[i].velocity = {-sin_a * velocity_mag, cos_a * velocity_mag, 0.0f};
         }
-        return 0.004 * std::powf((float)2000/N, 0.5);
+        return 0.004 * 1/(std::sqrt(static_cast<float>(N))*0.05);
     } else if (method == 2) {  
         // Modified uniform disk
         float inner_radius = 25.0f;
@@ -378,7 +378,7 @@ static float populate(body_t *bodies, int N, int method) {
             bodies[i].velocity.x *= v;
             bodies[i].velocity.y *= v;
         }
-        return 0.004 * std::powf((float)2000/N, 0.5);
+        return 0.004 * 1/(std::sqrt(static_cast<float>(N))*0.05);
     } else if (method == 3) {  
         // Plummer distribution
         for (int i = 0; i < N; ++i) {
