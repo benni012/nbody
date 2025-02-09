@@ -139,7 +139,6 @@ int main(int argc, char **argv) {
     // }
 #endif
 
-    // float theta = 0.0f;     // Horizontal angle (longitude)
     float phi = 1.570796f;       // Vertical angle (latitude)
     float theta = 1.570796f;       // Vertical angle (latitude)
     float sensitivity = 0.02f;
@@ -167,9 +166,10 @@ int main(int argc, char **argv) {
         if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)    phi -= sensitivity;    // Rotate up
         if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)  phi += sensitivity;    // Rotate down
 
-        if (phi < 0.1f) phi = 0.1f;
-        if (phi > 3.04f) phi = 3.04f;
-        
+        theta = fmod(theta, 2.0f * M_PI);
+        if (theta < 0) theta += 2.0f * M_PI;
+        phi = std::max(0.1f, std::min(phi, (float)M_PI - 0.1f));
+
         if (use_bh) { // BARNES HUT BODY UPDATES
             octree_free(&octree);
             double current_time = start_time;
