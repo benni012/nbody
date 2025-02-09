@@ -139,22 +139,10 @@ int main(int argc, char **argv) {
     // }
 #endif
 
-    /*
-          // start ffmpeg telling it to expect raw rgba 720p-60hz frames
-          // -i - tells it to read frames from stdin
-          const char* cmd = "ffmpeg -r 60 -f rawvideo -pix_fmt rgba -s
-       2560x1440-i
-       - "
-                            "-threads 0 -preset fast -y -pix_fmt yuv420p
-       -crf 21 -vf vflip output.mp4";
-
-          // open pipe to ffmpeg's stdin in binary write mode
-          FILE* ffmpeg = popen(cmd, "w");
-          if (!ffmpeg) {
-              fprintf(stderr, "Could not open pipe to ffmpeg\n");
-              return -1;
-          }
-    */
+    // float theta = 0.0f;     // Horizontal angle (longitude)
+    float phi = 1.570796f;       // Vertical angle (latitude)
+    float theta = 1.570796f;       // Vertical angle (latitude)
+    float sensitivity = 0.02f;
 
     std::signal(SIGINT, signalHandler);
     int current_iter = 0;
@@ -165,17 +153,23 @@ int main(int argc, char **argv) {
         // scroll wheel or +/- keys or arrow up/down (93/45 for german layout)
         if (glfwGetKey(window, GLFW_KEY_KP_ADD) == GLFW_PRESS ||
             glfwGetKey(window, GLFW_KEY_EQUAL) == GLFW_PRESS ||
-            glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS ||
             glfwGetKey(window, 93)) {
             zoom *= 1.1; // Zoom in
-        } else if (glfwGetKey(window, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS ||
+        }
+        if (glfwGetKey(window, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS ||
                    glfwGetKey(window, GLFW_KEY_MINUS) == GLFW_PRESS ||
-                   glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS ||
                    glfwGetKey(window, 47)) {
             zoom /= 1.1; // Zoom out
         }
+        
+        if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)  theta -= sensitivity;  // Rotate left
+        if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) theta += sensitivity;  // Rotate right
+        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)    phi -= sensitivity;    // Rotate up
+        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)  phi += sensitivity;    // Rotate down
 
-
+        if (phi < 0.1f) phi = 0.1f;
+        if (phi > 3.04f) phi = 3.04f;
+        
         if (use_bh) { // BARNES HUT BODY UPDATES
             octree_free(&octree);
             double current_time = start_time;
@@ -231,7 +225,7 @@ int main(int argc, char **argv) {
         }
         // time it
         float frame_time = glfwGetTime() - start_time;
-        draw(bodies, N, frame_time, zoom);
+        draw(bodies, N, frame_time, zoom, phi, theta);
 
         // needed because we catch ctrl-c signal
         if (close_window || current_iter >= iters - 1) { 

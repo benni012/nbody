@@ -34,7 +34,9 @@ find_package(OpenMP)
 find_package(glfw3 3.3 REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
-include_directories(${GLEW_INCLUDE_DIRS} imgui/)
+find_package(glm REQUIRED)
+include_directories(${GLEW_INCLUDE_DIRS} imgui/ ${GLM_INCLUDE_DIRS})
+include_directories()
 
 # ImGui library
 add_library(imgui STATIC

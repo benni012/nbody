@@ -11,6 +11,10 @@
 #include <cstdio>
 #include <getopt.h>
 #include <random>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 // exit
 #include <cstdlib>
 
@@ -67,15 +71,17 @@ static GLuint createShaderProgram(const char *vertexSource,
 
 // shader to draw points
 static const char *vertexShaderSource = R"(
-#version 150 core
-uniform float zoom;
-in vec3 position;
+  #version 150 core
+  uniform mat4 view;
+  uniform mat4 projection;
+  uniform float zoom;
+  in vec3 position;
 
-void main() {
-    vec3 adjustedPosition = position * zoom;
-    gl_Position = vec4(adjustedPosition.x, adjustedPosition.y, 0.0, 1.0);
-    gl_PointSize = 3.0; // Adjust as needed
-}
+  void main() {
+      vec4 worldPos = vec4(position * zoom, 1.0);
+      gl_Position = projection * view * worldPos;
+      gl_PointSize = 3.0;
+  }
 )";
 
 static const char *fragmentShaderSource = R"(
@@ -197,17 +203,32 @@ static void init_graphics(int N, body_t *bodies) {
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(body_t), (void *)0);
     glEnableVertexAttribArray(0);
 
+
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
+
+    glEnable(GL_DEPTH_TEST);
 }
 
-static void draw(body_t *bodies, int N, float frameTime, float zoom) {
+static void draw(body_t *bodies, int N, float frameTime, float zoom, float phi, float theta) {
+    float camX = 1 * sin(phi) * cos(theta);
+    float camY = 1 * cos(phi); // Controls up/down movement
+    float camZ = 1 * sin(phi) * sin(theta);
+    
+    glm::vec3 cameraPos = glm::vec3(camX, camY, camZ);
+    glm::vec3 target = glm::vec3(0.0f, 0.0f, 0.0f);  // Always look at the center
+    glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);      // Define the "up" direction
+
+    glm::mat4 view = lookAt(cameraPos, target, up);
+
+
     glfwPollEvents();
 
     double currentTime = glfwGetTime();
 
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    // glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     glUseProgram(shaderProgram);
     GLuint aspectRatioLoc = glGetUniformLocation(shaderProgram, "aspectRatio");
@@ -216,7 +237,13 @@ static void draw(body_t *bodies, int N, float frameTime, float zoom) {
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0, N * sizeof(body_t), bodies);
     glBufferData(GL_ARRAY_BUFFER, N * sizeof(body_t), bodies, GL_DYNAMIC_DRAW);
-    // uniform
+
+
+    glm::mat4 projection = glm::perspective(glm::radians(45.0f), aspectRatio, 0.1f, 100.0f);
+    GLuint projLoc = glGetUniformLocation(shaderProgram, "projection");
+    glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    GLuint viewLoc = glGetUniformLocation(shaderProgram, "view");
+    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, value_ptr(view));
     GLuint zoomLoc = glGetUniformLocation(shaderProgram, "zoom");
     glUniform1f(zoomLoc, zoom);
 

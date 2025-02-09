@@ -7,8 +7,8 @@
 # GPU Accelerated n-body system
 
 3D nbody simulation using the Naive or Barnes-Hut approximation algorithm on CPU or Nvidia GPU.
-A 2D projection of the bodies is rendered _realtime_ with [imgui](https://github.com/ocornut/imgui), [OpenGL](https://www.opengl.org/) and [GLFW](https://www.glfw.org/).
-The CPU version also relies on [OpenMP](https://www.openmp.org/).
+A 2D projection of the bodies is rendered _realtime_ with [imgui](https://github.com/ocornut/imgui), [OpenGL](https://www.opengl.org/), [glm](https://github.com/g-truc/glm) and [GLFW](https://www.glfw.org/).
+The CPU version also (optionally) relies on [OpenMP](https://www.openmp.org/).
 
 If a NVIDIA graphics card and CUDA is avilable the computations can be parallelized increasing frame performance significantly.
 ## Running Instructions
