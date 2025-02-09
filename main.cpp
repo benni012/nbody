@@ -162,14 +162,19 @@ int main(int argc, char **argv) {
         double start_time = glfwGetTime();
         glfwPollEvents();
 
-        // scroll wheel or +/- keys
+        // scroll wheel or +/- keys or arrow up/down (93/45 for german layout)
         if (glfwGetKey(window, GLFW_KEY_KP_ADD) == GLFW_PRESS ||
-            glfwGetKey(window, GLFW_KEY_EQUAL) == GLFW_PRESS) {
+            glfwGetKey(window, GLFW_KEY_EQUAL) == GLFW_PRESS ||
+            glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS ||
+            glfwGetKey(window, 93)) {
             zoom *= 1.1; // Zoom in
         } else if (glfwGetKey(window, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS ||
-                   glfwGetKey(window, GLFW_KEY_MINUS) == GLFW_PRESS) {
+                   glfwGetKey(window, GLFW_KEY_MINUS) == GLFW_PRESS ||
+                   glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS ||
+                   glfwGetKey(window, 47)) {
             zoom /= 1.1; // Zoom out
         }
+
 
         if (use_bh) { // BARNES HUT BODY UPDATES
             octree_free(&octree);
