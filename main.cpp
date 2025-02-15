@@ -107,10 +107,6 @@ int main(int argc, char **argv) {
             break;
         case 'p':
             population_method = (int)strtod(optarg, nullptr);
-            if (population_method > 3){
-                fprintf(stderr, "Invalid population-method choice\n");
-                return -1;
-            }
             break;
         default:
             break;
@@ -130,6 +126,10 @@ int main(int argc, char **argv) {
     // Initialize everything
     init_graphics(N, bodies);
     float zoom = populate(bodies, N, population_method);
+    if (zoom < 0) {
+        fprintf(stderr, "Invalid population method\n");
+        return -1;
+    }
 #ifdef CUDA_FOUND
     gpu_pin_mem(N, bodies);
     gpu_setup(N, bodies);

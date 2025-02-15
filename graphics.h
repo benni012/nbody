@@ -78,8 +78,8 @@ static const char *vertexShaderSource = R"(
   in vec3 position;
 
   void main() {
-      vec4 worldPos = vec4(position * zoom, 1.0);
-      gl_Position = projection * view * worldPos;
+      gl_Position = projection * view * vec4(position * zoom, 1.0);
+
       gl_PointSize = 3.0;
   }
 )";
@@ -91,6 +91,7 @@ static const char *fragmentShaderSource = R"(
     void main() {
         // scale factor
 //        float scale = min(1e5 / float(pointCount), 2.);
+//        float scale = 0.1;
 //        FragColor = vec4(.5*scale, .1*scale, .05*scale, 1.);
         FragColor = vec4(0.5, 0.1, 0.05, 1.);
     }
@@ -207,7 +208,9 @@ static void init_graphics(int N, body_t *bodies) {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
-    glEnable(GL_DEPTH_TEST);
+//    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_DEPTH_TEST);
+
 }
 
 static void draw(body_t *bodies, int N, float frameTime, float zoom, float phi, float theta) {
@@ -407,8 +410,59 @@ static float populate(body_t *bodies, int N, int method) {
             bodies[i].velocity = {u, v, w};
         }
         return 0.2;
-    } else {
+    } else if (method == 4) {
+        // Uniform sphere
+        for (int i = 0; i < N; i++) {
+            float theta = uniform_dist(generator) * 2.0f * M_PI;
+            float phi = uniform_dist(generator) * M_PI;
+            float r = 0.5f * std::cbrt(uniform_dist(generator));
+            float x = r * std::sin(phi) * std::cos(theta);
+            float y = r * std::sin(phi) * std::sin(theta);
+            float z = r * std::cos(phi);
+            bodies[i].position = {x, z, y, 1.0f / N};
+            bodies[i].velocity = {0, 0, 0};
+        }
+        return 0.4;
+    } else if (method == 5) {
+        // central mass + uniform disk
+        float center_mass = 1e6;
+        bodies[0].position = {0, 0, 0, center_mass};
+        bodies[0].velocity = {0, 0, 0};
+
+
+        for (int i = 1; i < N; i++) {
+            float angle = uniform_dist(generator) * 2.0f * M_PI;
+            float r = i / 400. + 2;
+
+            float a = r;
+            float ecc = 0.4;
+            float b = a * std::sqrt(1 - ecc * ecc);
+
+            float theta = fmod(1. * i / N, 1.) * 2 * M_PI;
+
+            // rotated ellipse
+            float x = a * std::cos(angle) * std::cos(theta) - b * std::sin(angle) * std::sin(theta);
+            float y = a * std::cos(angle) * std::sin(theta) + b * std::sin(angle) * std::cos(theta);
+
+            r = std::sqrt(x * x + y * y);
+            float vel = std::sqrt(center_mass / r);
+
+            bodies[i].position = {x, y, 0, 1.0f};
+            bodies[i].velocity = {vel * std::sin(angle), -vel * std::cos(angle), 0};
+            // rotate velocity by theta
+            float vx = bodies[i].velocity.x * std::cos(theta) - bodies[i].velocity.y * std::sin(theta);
+            float vy = bodies[i].velocity.x * std::sin(theta) + bodies[i].velocity.y * std::cos(theta);
+            bodies[i].velocity.x = vx;
+            bodies[i].velocity.y = vy;
+
+
+        }
+
+        return 100./N;
+    }
+    else {
         return -1;
     }
+
 }
 #endif // NBODY_GRAPHICS_H
