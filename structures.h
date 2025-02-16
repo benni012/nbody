@@ -25,6 +25,7 @@ typedef struct float3 {
 struct alignas(16) body_t {
     float4 position;
     float3 velocity;
+    float4 color = {0.5, 0.1, 0.05, 1.0};
 };
 struct alignas(16) box_t {
     float3 center;

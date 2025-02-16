@@ -71,29 +71,28 @@ static GLuint createShaderProgram(const char *vertexSource,
 
 // shader to draw points
 static const char *vertexShaderSource = R"(
-  #version 150 core
-  uniform mat4 view;
-  uniform mat4 projection;
-  uniform float zoom;
-  in vec3 position;
+    #version 330 core
+    layout(location = 0) in vec3 position;    // Position attribute
+    layout(location = 1) in vec4 in_color;  // Color attribute
+    uniform mat4 view;
+    uniform mat4 projection;
+    uniform float zoom;
+    out vec4 color;
 
-  void main() {
-      gl_Position = projection * view * vec4(position * zoom, 1.0);
-
-      gl_PointSize = 3.0;
-  }
+    void main() {
+        gl_Position = projection * view * vec4(position * zoom, 1.0);
+        gl_PointSize = 3.0;
+        color = in_color;
+    }
 )";
 
 static const char *fragmentShaderSource = R"(
-    #version 150 core
+    #version 330 core
     uniform int pointCount;
     out vec4 FragColor;
+    in vec4 color;
     void main() {
-        // scale factor
-//        float scale = min(1e5 / float(pointCount), 2.);
-//        float scale = 0.1;
-//        FragColor = vec4(.5*scale, .1*scale, .05*scale, 1.);
-        FragColor = vec4(0.5, 0.1, 0.05, 1.);
+        FragColor = color;
     }
 )";
 
@@ -238,8 +237,12 @@ static void draw(body_t *bodies, int N, float frameTime, float zoom, float phi, 
     glUniform1f(aspectRatioLoc, aspectRatio);
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, N * sizeof(body_t), bodies);
     glBufferData(GL_ARRAY_BUFFER, N * sizeof(body_t), bodies, GL_DYNAMIC_DRAW);
+    // Enable position and color attributes in body_t
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(body_t), (void*)offsetof(body_t, position)); // Assume position is vec3
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(body_t), (void*)offsetof(body_t, color)); // Assume color is vec4
+    glEnableVertexAttribArray(1);
 
 
     glm::mat4 projection = glm::perspective(glm::radians(45.0f), aspectRatio, 0.1f, 100.0f);
@@ -254,7 +257,6 @@ static void draw(body_t *bodies, int N, float frameTime, float zoom, float phi, 
     glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE);
     glDrawArrays(GL_POINTS, 0, N);
-    glLoadIdentity();
     glBindVertexArray(0);
 
     ImGui_ImplOpenGL3_NewFrame();
@@ -432,7 +434,7 @@ static float populate(body_t *bodies, int N, int method) {
 
         for (int i = 1; i < N; i++) {
             float angle = uniform_dist(generator) * 2.0f * M_PI;
-            float r = i / 400. + 2;
+            float r = i / 400. + 10;
 
             float a = r;
             float ecc = 0.4;
@@ -445,7 +447,7 @@ static float populate(body_t *bodies, int N, int method) {
             float y = a * std::cos(angle) * std::sin(theta) + b * std::sin(angle) * std::cos(theta);
 
             r = std::sqrt(x * x + y * y);
-            float vel = std::sqrt(center_mass / r);
+            float vel = std::sqrt(center_mass * (2/ r - 1/a));
 
             bodies[i].position = {x, y, 0, 1.0f};
             bodies[i].velocity = {vel * std::sin(angle), -vel * std::cos(angle), 0};
@@ -455,6 +457,10 @@ static float populate(body_t *bodies, int N, int method) {
             bodies[i].velocity.x = vx;
             bodies[i].velocity.y = vy;
 
+            // 90% probability: set color to transparent
+//            if (uniform_dist(generator) < 0.9) {
+//                bodies[i].color = {0.5, 0.1, 0.05, 0.0};
+//            }
 
         }
 

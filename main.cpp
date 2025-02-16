@@ -123,6 +123,11 @@ int main(int argc, char **argv) {
 
     bodies = (body_t *)calloc(N, sizeof(body_t));
 
+    // set default color
+    for (int i = 0; i < N; i++) {
+        bodies[i].color = {0.5, 0.1, 0.05, 1.0};
+    }
+
     // Initialize everything
     init_graphics(N, bodies);
     float zoom = populate(bodies, N, population_method);
