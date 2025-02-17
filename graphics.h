@@ -449,7 +449,9 @@ static float populate(body_t *bodies, int N, int method) {
             r = std::sqrt(x * x + y * y);
             float vel = std::sqrt(center_mass * (2/ r - 1/a));
 
-            bodies[i].position = {x, y, 0, 1.0f};
+            float z = 10 * (uniform_dist(generator) - 0.5f);
+
+            bodies[i].position = {x, y, z, 1.0f};
             bodies[i].velocity = {vel * std::sin(angle), -vel * std::cos(angle), 0};
             // rotate velocity by theta
             float vx = bodies[i].velocity.x * std::cos(theta) - bodies[i].velocity.y * std::sin(theta);
